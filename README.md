@@ -1,8 +1,6 @@
 <div align="center">
 
-# VascFusion: GAVE2 Challenge 2026 — 8th-Place Solution
-
-**Retinal artery/vein segmentation and vascular biomarker quantification from CFP and FFA**
+# VascFusion — 8th-Place Solution for the MICCAI 2026 GAVE2 Challenge
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
@@ -13,31 +11,18 @@
 </div>
 
 This repository contains the training and inference code for **VascFusion**,
-our 8th-place preliminary-round solution to the MICCAI 2026 GAVE2 Challenge.
+our 8th-place solution to the MICCAI 2026 GAVE2 Challenge.
 VascFusion covers all three tasks:
 
 1. CFP-only retinal artery/vein segmentation;
 2. CFP + FFA cross-modal artery/vein segmentation;
 3. CRAE, CRVE, AVR, artery/vein density, and artery/vein fractal dimension.
 
-> The challenge is still in progress. The rank in the repository title is the
-> preliminary rank at the time of release and may be updated after the final
-> round.
-
-## News
-
-- **2026-08**: Initial private code release with complete training and inference
-  pipelines. Model weights will be published separately after the competition.
-
-## Preliminary results
+## Results
 
 | Method | Task 1 | Task 2 | Task 3 | Overall |
 |---|---:|---:|---:|---:|
 | VascFusion | 8.29660 | 8.31706 | 7.39370 | **7.94362** |
-
-The overall score is computed by the organizer as
-`0.2 × Task1 + 0.4 × Task2 + 0.4 × Task3`. The repository does not contain
-competition images, annotations, predictions, or checkpoints.
 
 ## Method overview
 
@@ -140,14 +125,36 @@ the RGB artery/vessel/vein annotation. Images are expected at the official
 
 ## Checkpoints
 
-Checkpoints are intentionally excluded from Git. A Baidu Netdisk link will be
-added after the competition. After downloading the bundle, place files exactly
-as described in [weights/README.md](weights/README.md). Every expected file and
-SHA256 digest is recorded in
-[configs/weights_manifest.json](configs/weights_manifest.json).
+The released checkpoints are available from
+[Baidu Netdisk](https://pan.baidu.com/s/1tqCe97lvXGM0zn1VvUlPMA?pwd=29v6)
+(extraction code: `29v6`). Download the complete `weights/` directory and place
+it directly under the repository root. The download preserves the original
+training archive names, so create the semantic aliases expected by the public
+inference code:
 
-The external MINIMA checkpoint can also be downloaded from its
-[official release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt).
+```bash
+ln -sf v1_task1_fold0/best.pt weights/initialization/task1_fold0.pt
+ln -sf v1_task2_fold0/best.pt weights/initialization/task2_fold0.pt
+ln -sf tj009_v54_full/final.pt weights/task1/segmentation_cfp.pt
+ln -sf tj009_v54_full/final.pt weights/task2/segmentation_multimodal.pt
+ln -sf v2_task2_full/final.pt weights/task3/caliber_expert.pt
+ln -sf v3_task2_full/final.pt weights/task3/artery_density_expert.pt
+ln -sf v8_task2_full/final.pt weights/task3/vein_density_parent.pt
+ln -sf v21_v12_fd_full/final.pt weights/task3/phase_geometry_expert.pt
+ln -sf d0044_vein_density_full/final.pt weights/task3/vein_density_refiner.pt
+```
+
+The seven Task 1/2/3 checkpoints are required for inference. The two
+initialization checkpoints are needed only to reproduce full training. The
+expected paths and SHA256 digests are listed in
+[configs/weights_manifest.json](configs/weights_manifest.json) and summarized
+in [weights/README.md](weights/README.md).
+
+Two third-party weights are not included in the Netdisk directory. Download
+MINIMA-LoFTR from its
+[official release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt)
+to `weights/external/minima_loftr.ckpt`, and place the MNet/DeepCDR optic-disc
+checkpoint at `weights/external/Model_DiscSeg_ORIGA.h5`.
 
 ## Reproduce VascFusion inference
 
@@ -350,7 +357,7 @@ python code/gave2_solution/train_vein_refiner.py \
 Only the compact C-zone refiner is optimized in the last stage; its parent
 network remains frozen.
 
-## Evaluation and submission rules
+## Evaluation and usage constraints
 
 For labeled local predictions, reproduce the released A/V metrics with:
 
@@ -371,8 +378,6 @@ local evaluator.
 - Task 3 always uses the same field route for every case.
 - No test labels or per-case leaderboard-driven selection are used.
 - Do not refit calibration factors on validation/private-test images.
-- The submission ZIP contains `Task1/`, `Task2/`, and `Task3/` directly, with
-  no extra team-name directory inside the archive.
 
 ## Third-party code
 

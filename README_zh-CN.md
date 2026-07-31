@@ -1,35 +1,23 @@
 <div align="center">
 
-# VascFusion：GAVE2 Challenge 2026 第 8 名方案
-
-**基于 CFP 与 FFA 的视网膜动静脉分割及血管生物标志物量化**
+# VascFusion——MICCAI 2026 GAVE2 Challenge 第 8 名方案
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
 </div>
 
 本仓库包含 **VascFusion** 的训练与推理代码。VascFusion 是我们参加 MICCAI
-2026 GAVE2 Challenge 的初赛第 8 名方案，覆盖三个任务：
+2026 GAVE2 Challenge 的第 8 名方案，覆盖三个任务：
 
 1. 仅使用 CFP 的视网膜动静脉分割；
 2. CFP + FFA 跨模态动静脉分割；
 3. CRAE、CRVE、AVR、动静脉密度和动静脉分形维数测量。
 
-> 比赛仍在进行中。仓库标题中的名次是发布时的初赛排名，决赛结束后可能更新。
-
-## 最新消息
-
-- **2026-08**：首次发布私有代码版，包含完整训练和推理流程；模型权重将在比赛
-  结束后通过独立链接发布。
-
-## 初赛结果
+## 比赛结果
 
 | 方法 | Task 1 | Task 2 | Task 3 | 总分 |
 |---|---:|---:|---:|---:|
 | VascFusion | 8.29660 | 8.31706 | 7.39370 | **7.94362** |
-
-主办方采用 `0.2 × Task1 + 0.4 × Task2 + 0.4 × Task3` 计算总分。本仓库不含
-比赛图像、标注、预测结果或模型权重。
 
 ## 方法概览
 
@@ -122,13 +110,34 @@ GAVE2_preliminary/
 
 ## 权重
 
-模型权重不会提交到 Git。比赛结束后会补充百度网盘链接。下载后请严格按照
-[weights/README.md](weights/README.md) 放置；所有权重的预期路径和 SHA256
-均记录在 [configs/weights_manifest.json](configs/weights_manifest.json)。
+模型权重可从
+[百度网盘](https://pan.baidu.com/s/1tqCe97lvXGM0zn1VvUlPMA?pwd=29v6)
+下载，提取码为 `29v6`。请下载完整的 `weights/` 目录，并直接放在仓库根目录下。
+网盘保留了训练时的原始归档目录名，因此还需执行以下命令，为公开推理代码创建
+语义化权重路径：
 
-MINIMA 权重也可从其
-[官方 Release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt)
-下载。
+```bash
+ln -sf v1_task1_fold0/best.pt weights/initialization/task1_fold0.pt
+ln -sf v1_task2_fold0/best.pt weights/initialization/task2_fold0.pt
+ln -sf tj009_v54_full/final.pt weights/task1/segmentation_cfp.pt
+ln -sf tj009_v54_full/final.pt weights/task2/segmentation_multimodal.pt
+ln -sf v2_task2_full/final.pt weights/task3/caliber_expert.pt
+ln -sf v3_task2_full/final.pt weights/task3/artery_density_expert.pt
+ln -sf v8_task2_full/final.pt weights/task3/vein_density_parent.pt
+ln -sf v21_v12_fd_full/final.pt weights/task3/phase_geometry_expert.pt
+ln -sf d0044_vein_density_full/final.pt weights/task3/vein_density_refiner.pt
+```
+
+Task 1/2/3 的七个正式权重是推理必需项；两个 initialization 权重仅在完整
+复现训练时使用。预期路径与 SHA256 记录在
+[configs/weights_manifest.json](configs/weights_manifest.json)，也可查看
+[weights/README.md](weights/README.md)。
+
+网盘目录不包含两个第三方权重。请从
+[MINIMA 官方 Release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt)
+下载 MINIMA-LoFTR，并放到 `weights/external/minima_loftr.ckpt`；另将
+MNet/DeepCDR 视盘权重放到
+`weights/external/Model_DiscSeg_ORIGA.h5`。
 
 ## 复现 VascFusion 推理
 
@@ -326,7 +335,7 @@ python code/gave2_solution/train_vein_refiner.py \
 
 最后阶段仅更新轻量 C 区修正器，其父网络保持冻结。
 
-## 评测与提交约束
+## 评测与使用约束
 
 对于本地有标签的预测，可复现公开 A/V 指标：
 
@@ -346,7 +355,6 @@ Task 3 的 `local_biomarker_eval.py` 会在有标签训练折上报告原始 MAE
 - Task 3 对所有病例使用完全相同的字段路由；
 - 不使用测试标签或逐病例榜单选择；
 - 不在验证集/私榜测试集重新拟合校准因子；
-- ZIP 内直接包含 `Task1/`、`Task2/`、`Task3/`，不能多套一层队伍目录。
 
 ## 第三方代码
 

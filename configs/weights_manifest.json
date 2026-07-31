@@ -3,7 +3,7 @@
   "release": "VascFusion preliminary model bundle",
   "weights_in_git": false,
   "download": {
-    "vascfusion_bundle": "TO_BE_RELEASED_AFTER_THE_COMPETITION",
+    "vascfusion_bundle": "https://pan.baidu.com/s/1tqCe97lvXGM0zn1VvUlPMA?pwd=29v6",
     "minima_official": "https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt"
   },
   "files": [

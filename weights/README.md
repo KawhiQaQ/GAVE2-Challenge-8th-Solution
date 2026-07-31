@@ -1,8 +1,10 @@
 # Checkpoint placement
 
-Model weights are intentionally excluded from Git. A Baidu Netdisk download
-link will be added after the competition. Extract the future bundle at the
-repository root so that the following files exist:
+Model weights are excluded from Git and released through
+[Baidu Netdisk](https://pan.baidu.com/s/1tqCe97lvXGM0zn1VvUlPMA?pwd=29v6)
+(extraction code: `29v6`). Download the shared `weights/` directory into the
+repository root, then create the semantic aliases documented in the root
+README so that the following files exist:
 
 ```text
 weights/
