@@ -1,0 +1,22 @@
+{
+  "fold": -1,
+  "n_folds": 5,
+  "seed": 77,
+  "height": 1024,
+  "width": 1536,
+  "epochs": 24,
+  "patience": 0,
+  "accumulation_steps": 2,
+  "learning_rate": 0.0003,
+  "weight_decay": 0.0001,
+  "warmup_epochs": 2,
+  "ema_decay": 0.995,
+  "data_root": "<DATA_ROOT>",
+  "ffa_root": "<REGISTERED_FFA_ROOT>",
+  "zone_c_dir": "<ZONE_C_ROOT>/training",
+  "parent_checkpoint": "<RUN_ROOT>/task3/v8/final.pt",
+  "output_dir": "<RUN_ROOT>/task3/d0044",
+  "device": "cuda",
+  "loss_policy": "vessel_argmax",
+  "selection_metric": "full_training_only"
+}

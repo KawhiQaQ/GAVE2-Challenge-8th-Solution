@@ -1,0 +1,45 @@
+# Competition data and derived caches
+/data/
+/cache/
+/work/
+/outputs/
+/runs/
+/submissions/
+
+# Checkpoints and large binary artifacts
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.onnx
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# Python / notebooks / editors
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.DS_Store
+._*
+.idea/
+.vscode/
+
+# Runtime logs
+*.log
+*.tmp
+*.partial
+

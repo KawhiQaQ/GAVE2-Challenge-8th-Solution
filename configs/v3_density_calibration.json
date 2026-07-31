@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "method": "mean_truth_over_mean_prediction",
+  "source": "training-only Fold-0 out-of-fold predictions (not test data)",
+  "n_cases": 10,
+  "case_ids": [
+    "g_002",
+    "g_003",
+    "g_006",
+    "g_010",
+    "g_020",
+    "g_025",
+    "g_027",
+    "g_029",
+    "g_030",
+    "g_041"
+  ],
+  "factors": {
+    "artery_density": 0.7901800803823632,
+    "vein_density": 0.7380587746433526
+  }
+}
