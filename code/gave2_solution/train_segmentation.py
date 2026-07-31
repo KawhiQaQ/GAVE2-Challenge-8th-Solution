@@ -5,7 +5,7 @@ import argparse
 import json
 import math
 import time
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import torch
@@ -18,20 +18,30 @@ from gave2v1.engine import (
     seed_everything,
     select_device,
 )
-from gave2v1.engine_v2 import (
-    V2FitConfig,
+from gave2v1.training_engine import (
+    FitConfig,
     build_optimizer,
     save_checkpoint,
     set_encoder_trainable,
     train_one_epoch,
 )
-from gave2v1.losses_v2 import GAVEV2Loss, V2LossWeights
-from gave2v1.model_v2 import build_v2, warm_start_v2
-from gave2v1.model_v12 import build_v12, warm_start_v12
+from gave2v1.topology_losses import TopologyAwareLoss, TopologyLossWeights
+from gave2v1.model_vascfusion import (
+    build_vascfusion,
+    warm_start_vascfusion,
+)
 
 
-ROOT = Path(__file__).resolve().parent
-DEFAULT_DATA = ROOT.parent / "GAVE2_preliminary"
+@dataclass
+class VascFusionTrainingConfig(FitConfig):
+    full_training: bool = True
+    method: str = "VascFusion-Seg"
+    native_final_refiner: bool = False
+    physiology_detail: bool = False
+    optical_density_detail: bool = False
+    phase_balance_detail: bool = False
+    r2_steps: int = 0
+    same_fold_v1_first_stage: bool = False
 
 
 def parse_size(value: str) -> tuple[int, int]:
@@ -45,18 +55,13 @@ def parse_size(value: str) -> tuple[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train the fold0-validated GAVE2 V2 recipe on all labels."
+        description="Train VascFusion-Seg on all 50 labeled cases."
     )
     parser.add_argument("--task", type=int, choices=(1, 2), required=True)
-    parser.add_argument("--data-root", default=str(DEFAULT_DATA))
-    parser.add_argument(
-        "--ffa-root",
-        help=(
-            "Optional root containing split/FFA_A and split/FFA_AV. "
-            "Task1 must omit this; Task2 may use a frozen registered cache."
-        ),
-    )
+    parser.add_argument("--data-root", required=True)
+    parser.add_argument("--ffa-root")
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--init-checkpoint", required=True)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--size", type=parse_size, default=(1024, 1536))
     parser.add_argument("--batch-size", type=int, default=1)
@@ -67,42 +72,27 @@ def main() -> None:
     parser.add_argument("--warmup-epochs", type=int, default=2)
     parser.add_argument("--freeze-encoder-epochs", type=int, default=1)
     parser.add_argument("--ema-decay", type=float, default=0.995)
-    parser.add_argument("--num-refinements", type=int, default=3)
-    parser.add_argument(
-        "--hard-gap-weight",
-        type=float,
-        default=0.0,
-        help="Weight for the weakest-centerline gap loss.",
-    )
+    parser.add_argument("--refinement-steps", type=int, default=5)
+    parser.add_argument("--hard-gap-weight", type=float, default=0.25)
     parser.add_argument("--seed", type=int, default=77)
-    parser.add_argument("--device", default="auto")
+    parser.add_argument("--device", default="cuda")
     parser.add_argument("--num-workers", type=int, default=0)
-    parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
-    parser.add_argument(
-        "--v12-phase-geometry",
-        action="store_true",
-        help=(
-            "Use the Fold0/Fold1-validated V12 full FFA phase-geometry "
-            "architecture. This is Task2-only and requires --ffa-root."
-        ),
-    )
-    parser.add_argument("--init-checkpoint", required=True)
     args = parser.parse_args()
-
     if args.epochs < 1:
         raise ValueError("--epochs must be positive")
     if args.hard_gap_weight < 0:
         raise ValueError("--hard-gap-weight must be non-negative")
+    if args.refinement_steps < 1:
+        raise ValueError("--refinement-steps must be positive")
+    if args.task == 1 and args.ffa_root:
+        raise ValueError("Task1 full training is strictly CFP-only")
+    if args.task == 2 and not args.ffa_root:
+        raise ValueError("Task2 full training requires --ffa-root")
     data_root = Path(args.data_root).resolve()
     ffa_root = Path(args.ffa_root).resolve() if args.ffa_root else None
-    if args.task == 1 and ffa_root is not None:
-        raise ValueError("Task1 full training must not receive --ffa-root")
-    if args.v12_phase_geometry and args.task != 2:
-        raise ValueError("--v12-phase-geometry is valid only for Task2")
-    if args.v12_phase_geometry and ffa_root is None:
-        raise ValueError("--v12-phase-geometry requires --ffa-root")
     output_dir = Path(args.output_dir).resolve()
+    init_checkpoint = Path(args.init_checkpoint).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     device = select_device(args.device)
     seed_everything(args.seed)
@@ -110,6 +100,7 @@ def main() -> None:
     if len(ids) != 50:
         raise ValueError(f"Expected 50 labeled cases, found {len(ids)}")
     height, width = args.size
+
     dataset = GAVE2Dataset(
         data_root,
         ids,
@@ -127,26 +118,19 @@ def main() -> None:
         pin_memory=device.type == "cuda",
         drop_last=False,
     )
-    if args.v12_phase_geometry:
-        model = build_v12(
-            phase_pretrained=not args.no_pretrained,
-            num_refinements=args.num_refinements,
-        )
-        initialization = {
-            "source": str(Path(args.init_checkpoint).resolve()),
-            **warm_start_v12(model, args.init_checkpoint),
-        }
-    else:
-        model = build_v2(
-            args.task,
-            pretrained=not args.no_pretrained,
-            num_refinements=args.num_refinements,
-        )
-        initialization = {
-            "source": str(Path(args.init_checkpoint).resolve()),
-            **warm_start_v2(model, args.init_checkpoint),
-        }
-    config = V2FitConfig(
+
+    model = build_vascfusion(
+        task=args.task,
+        pretrained=False,
+        r2_steps=args.refinement_steps,
+    )
+    initialization = {
+        "source": str(init_checkpoint),
+        "stage_one_initialization": True,
+        **warm_start_vascfusion(model, init_checkpoint),
+    }
+
+    config = VascFusionTrainingConfig(
         task=args.task,
         fold=-1,
         n_folds=5,
@@ -166,23 +150,20 @@ def main() -> None:
         device=str(device),
         data_root=str(data_root),
         output_dir=str(output_dir),
-        pretrained=not args.no_pretrained,
-        num_refinements=args.num_refinements,
+        pretrained=False,
+        num_refinements=args.refinement_steps,
         hard_gap_weight=args.hard_gap_weight,
         ffa_root=str(ffa_root) if ffa_root is not None else None,
+        native_final_refiner=args.task == 1,
+        physiology_detail=args.task == 1,
+        optical_density_detail=args.task == 1,
+        phase_balance_detail=False,
+        r2_steps=args.refinement_steps,
+        same_fold_v1_first_stage=True,
     )
     split = {"training": ids, "validation": []}
     (output_dir / "config.json").write_text(
-        json.dumps(
-            {
-                **asdict(config),
-                "full_training": True,
-                "v2_recipe": args.hard_gap_weight == 0.0,
-                "hard_gap_recipe": args.hard_gap_weight > 0.0,
-                "v12_phase_geometry": args.v12_phase_geometry,
-            },
-            indent=2,
-        ),
+        json.dumps(asdict(config), indent=2),
         encoding="utf-8",
     )
     (output_dir / "split.json").write_text(
@@ -195,8 +176,8 @@ def main() -> None:
     )
 
     model.to(device)
-    loss_function = GAVEV2Loss(
-        weights=V2LossWeights(hard_gap=args.hard_gap_weight),
+    loss_function = TopologyAwareLoss(
+        weights=TopologyLossWeights(hard_gap=args.hard_gap_weight),
     ).to(device)
     optimizer = build_optimizer(model, config)
     updates_per_epoch = math.ceil(
@@ -210,29 +191,32 @@ def main() -> None:
     scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
     ema = ModelEMA(model, decay=args.ema_decay)
     history: list[dict[str, object]] = []
+
     print(
         json.dumps(
             {
                 "architecture": model.architecture_name,
+                "method": "VascFusion-Seg",
                 "device": str(device),
-                "parameters": sum(
+                "total_parameters": sum(
                     parameter.numel() for parameter in model.parameters()
                 ),
+                "trainable_parameters": sum(
+                    parameter.numel()
+                    for parameter in model.parameters()
+                    if parameter.requires_grad
+                ),
                 "task": args.task,
+                "task1_ffa_loaded": False,
                 "training_cases": len(ids),
                 "epochs": args.epochs,
                 "size": [height, width],
                 "hard_gap_weight": args.hard_gap_weight,
+                "refinement_steps": args.refinement_steps,
                 "ffa_root": (
                     str(ffa_root) if ffa_root is not None else None
                 ),
                 "updates_per_epoch": updates_per_epoch,
-                "v12_phase_geometry": args.v12_phase_geometry,
-                "initial_phase_fusion_strengths": (
-                    model.phase_fusion_strengths().detach().tolist()
-                    if args.v12_phase_geometry
-                    else None
-                ),
                 "initialization": initialization,
             },
             indent=2,
@@ -296,6 +280,7 @@ def main() -> None:
         {"training": history[-1]["training"], "full_training": True},
     )
     summary = {
+        "method": "VascFusion-Seg",
         "epochs_completed": args.epochs,
         "optimizer_updates": args.epochs * updates_per_epoch,
         "final_checkpoint": str(output_dir / "final.pt"),

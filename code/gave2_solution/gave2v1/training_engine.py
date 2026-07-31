@@ -14,13 +14,13 @@ from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
 from .engine import ModelEMA, WarmupCosine, move_batch
-from .losses_v2 import GAVEV2Loss
-from .metrics_v2 import V2MetricAccumulator
-from .model_v2 import GAVEV2
+from .model_core import RetinalVesselNet
+from .segmentation_metrics import SegmentationMetricAccumulator
+from .topology_losses import TopologyAwareLoss
 
 
 @dataclass
-class V2FitConfig:
+class FitConfig:
     task: int
     fold: int
     n_folds: int
@@ -47,8 +47,8 @@ class V2FitConfig:
 
 
 def build_optimizer(
-    model: GAVEV2,
-    config: V2FitConfig,
+    model: RetinalVesselNet,
+    config: FitConfig,
 ) -> torch.optim.AdamW:
     encoder_parameters, new_parameters = model.parameter_groups()
     return torch.optim.AdamW(
@@ -64,15 +64,15 @@ def build_optimizer(
     )
 
 
-def set_encoder_trainable(model: GAVEV2, trainable: bool) -> None:
+def set_encoder_trainable(model: RetinalVesselNet, trainable: bool) -> None:
     for parameter in model.encoder.parameters():
         parameter.requires_grad_(trainable)
 
 
 def train_one_epoch(
-    model: GAVEV2,
+    model: RetinalVesselNet,
     ema: ModelEMA,
-    loss_function: GAVEV2Loss,
+    loss_function: TopologyAwareLoss,
     loader: DataLoader,
     optimizer: Optimizer,
     scheduler: WarmupCosine,
@@ -120,15 +120,15 @@ def train_one_epoch(
 
 @torch.inference_mode()
 def evaluate(
-    model: GAVEV2,
-    loss_function: GAVEV2Loss,
+    model: RetinalVesselNet,
+    loss_function: TopologyAwareLoss,
     loader: DataLoader,
     device: torch.device,
     threshold: float = 0.5,
 ) -> dict[str, Any]:
     model.eval()
     loss_totals: dict[str, float] = {}
-    accumulator = V2MetricAccumulator(threshold=threshold)
+    accumulator = SegmentationMetricAccumulator(threshold=threshold)
     for batch in loader:
         case_names = batch["id"]
         batch_device = move_batch(batch, device)
@@ -157,8 +157,8 @@ def evaluate(
 
 def save_checkpoint(
     path: Path,
-    model: GAVEV2,
-    config: V2FitConfig,
+    model: RetinalVesselNet,
+    config: FitConfig,
     split: dict[str, list[str]],
     epoch: int,
     metrics: dict[str, Any],
@@ -177,13 +177,13 @@ def save_checkpoint(
     )
 
 
-def fit_v2(
-    model: GAVEV2,
-    loss_function: GAVEV2Loss,
+def fit_topology_model(
+    model: RetinalVesselNet,
+    loss_function: TopologyAwareLoss,
     train_loader: DataLoader,
     validation_loader: DataLoader,
     split: dict[str, list[str]],
-    config: V2FitConfig,
+    config: FitConfig,
 ) -> dict[str, Any]:
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

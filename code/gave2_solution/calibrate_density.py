@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Assemble a frozen GAVE2 Task3 policy from validated component sources.
+"""Apply the frozen training-only density calibration policy.
 
-The default V3 policy uses:
+The released policy uses:
 
 * CRAE, CRVE and AVR from independently thresholded artery/vein masks;
 * densities and fractal dimensions from vessel-gated A/V masks;

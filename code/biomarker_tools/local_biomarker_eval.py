@@ -183,7 +183,7 @@ def main() -> None:
         default="vessel_argmax",
         help=(
             "How probability PNGs become Task3 artery/vein masks. "
-            "'vessel_argmax' preserves the historical V1/V2 pipeline; "
+            "'vessel_argmax' preserves the released VascFusion pipeline; "
             "'exclusive_av' mirrors released get_biomarker.py after "
             "thresholding [A, vessel, V] channels; "
             "'independent_av' follows the submitted R/B channel semantics."

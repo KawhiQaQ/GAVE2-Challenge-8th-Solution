@@ -17,12 +17,13 @@
   "ema_decay": 0.995,
   "device": "cuda",
   "data_root": "<DATA_ROOT>",
-  "output_dir": "<RUN_ROOT>/task3/v8",
-  "pretrained": false,
+  "output_dir": "<RUN_ROOT>/quant/phase_geometry",
+  "pretrained": true,
   "num_refinements": 3,
   "hard_gap_weight": 0.25,
   "ffa_root": "<REGISTERED_FFA_ROOT>",
   "full_training": true,
-  "v2_recipe": false,
-  "hard_gap_recipe": true
+  "probability_refinement_recipe": false,
+  "hard_gap_recipe": true,
+  "phase_geometry": true
 }

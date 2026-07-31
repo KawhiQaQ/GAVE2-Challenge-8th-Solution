@@ -8,6 +8,14 @@ BIOMARKER="${SCRIPT_DIR}/biomarker_tools/local_biomarker_eval.py"
 MINIMA="${SCRIPT_DIR}/external/MINIMA"
 MINIMA_WEIGHT="${BACKUP_ROOT}/weights/external/minima_loftr.ckpt"
 DISC_WEIGHT="${BACKUP_ROOT}/weights/external/Model_DiscSeg_ORIGA.h5"
+TASK1_WEIGHT="${BACKUP_ROOT}/weights/task1/segmentation_cfp.pt"
+TASK2_WEIGHT="${BACKUP_ROOT}/weights/task2/segmentation_multimodal.pt"
+CALIBER_WEIGHT="${BACKUP_ROOT}/weights/task3/caliber_expert.pt"
+ARTERY_DENSITY_WEIGHT="${BACKUP_ROOT}/weights/task3/artery_density_expert.pt"
+VEIN_PARENT_WEIGHT="${BACKUP_ROOT}/weights/task3/vein_density_parent.pt"
+PHASE_GEOMETRY_WEIGHT="${BACKUP_ROOT}/weights/task3/phase_geometry_expert.pt"
+VEIN_REFINER_WEIGHT="${BACKUP_ROOT}/weights/task3/vein_density_refiner.pt"
+ARTERY_DENSITY_CALIBRATION="${BACKUP_ROOT}/configs/artery_density_calibration.json"
 
 DATA_ROOT=""
 WORK_ROOT=""
@@ -21,7 +29,7 @@ DEVICE="cuda"
 usage() {
     cat <<'EOF'
 Usage:
-  bash code/run_tj009_inference.sh \
+  bash code/run_inference.sh \
     --data-root /path/to/GAVE2_private \
     --work-root /path/to/work \
     --output-zip /path/to/kawhi00.zip \
@@ -74,18 +82,18 @@ for required in \
     "${DATA_ROOT}/validation/masks" \
     "${DATA_ROOT}/validation/FFA_A" \
     "${DATA_ROOT}/validation/FFA_AV" \
-    "${BACKUP_ROOT}/weights/task1/tj009_v54_full/final.pt" \
-    "${BACKUP_ROOT}/weights/task2/tj009_v54_full/final.pt" \
-    "${BACKUP_ROOT}/weights/task3/v2_task2_full/final.pt" \
-    "${BACKUP_ROOT}/weights/task3/v3_task2_full/final.pt" \
-    "${BACKUP_ROOT}/weights/task3/v8_task2_full/final.pt" \
-    "${BACKUP_ROOT}/weights/task3/v21_v12_fd_full/final.pt" \
-    "${BACKUP_ROOT}/weights/task3/d0044_vein_density_full/final.pt" \
+    "${TASK1_WEIGHT}" \
+    "${TASK2_WEIGHT}" \
+    "${CALIBER_WEIGHT}" \
+    "${ARTERY_DENSITY_WEIGHT}" \
+    "${VEIN_PARENT_WEIGHT}" \
+    "${PHASE_GEOMETRY_WEIGHT}" \
+    "${VEIN_REFINER_WEIGHT}" \
     "${MINIMA_WEIGHT}" \
     "${DISC_WEIGHT}" \
-    "${BACKUP_ROOT}/configs/v3_density_calibration.json"; do
+    "${ARTERY_DENSITY_CALIBRATION}"; do
     if [[ ! -e "${required}" ]]; then
-        echo "Missing required TJ009 asset: ${required}" >&2
+        echo "Missing required VascFusion asset: ${required}" >&2
         exit 1
     fi
 done
@@ -152,121 +160,126 @@ fi
 mkdir -p "${WORK_ROOT}/raw" "${WORK_ROOT}/biomarkers" "${WORK_ROOT}/build"
 
 # Task1 is strictly CFP-only. Task2 uses the registered FFA cache.
-"${PYTHON_BIN}" "${SOLUTION}/predict_v54.py" \
+"${PYTHON_BIN}" "${SOLUTION}/predict_segmentation.py" \
     --task 1 \
-    --checkpoint "${BACKUP_ROOT}/weights/task1/tj009_v54_full/final.pt" \
+    --checkpoint "${TASK1_WEIGHT}" \
     --data-root "${DATA_ROOT}" \
     --split validation \
-    --output-dir "${WORK_ROOT}/raw/task1_v54" \
+    --output-dir "${WORK_ROOT}/raw/segmentation_cfp" \
     --device "${DEVICE}"
-"${PYTHON_BIN}" "${SOLUTION}/predict_v54.py" \
+"${PYTHON_BIN}" "${SOLUTION}/predict_segmentation.py" \
     --task 2 \
-    --checkpoint "${BACKUP_ROOT}/weights/task2/tj009_v54_full/final.pt" \
+    --checkpoint "${TASK2_WEIGHT}" \
     --data-root "${DATA_ROOT}" \
     --ffa-root "${REGISTERED_FFA_ROOT}" \
     --split validation \
-    --output-dir "${WORK_ROOT}/raw/task2_v54" \
+    --output-dir "${WORK_ROOT}/raw/segmentation_multimodal" \
     --device "${DEVICE}"
 
 "${PYTHON_BIN}" "${SOLUTION}/postprocess_av.py" \
-    --input-dir "${WORK_ROOT}/raw/task1_v54" \
+    --input-dir "${WORK_ROOT}/raw/segmentation_cfp" \
     --masks-dir "${DATA_ROOT}/validation/masks" \
     --output-dir "${WORK_ROOT}/build/Task1" \
     --radius 3
 "${PYTHON_BIN}" "${SOLUTION}/postprocess_av.py" \
-    --input-dir "${WORK_ROOT}/raw/task2_v54" \
+    --input-dir "${WORK_ROOT}/raw/segmentation_multimodal" \
     --masks-dir "${DATA_ROOT}/validation/masks" \
     --output-dir "${WORK_ROOT}/build/Task2" \
     --radius 3
 
-# V2/V3 were trained and frozen with the original unregistered FFA geometry.
-for version in v2 v3; do
-    "${PYTHON_BIN}" "${SOLUTION}/predict_v2.py" \
-        --task 2 \
-        --checkpoint "${BACKUP_ROOT}/weights/task3/${version}_task2_full/final.pt" \
-        --data-root "${DATA_ROOT}" \
-        --split validation \
-        --output-dir "${WORK_ROOT}/raw/${version}" \
-        --device "${DEVICE}"
-done
+# The caliber and artery-density experts preserve the original FFA geometry.
+"${PYTHON_BIN}" "${SOLUTION}/predict_quantification.py" \
+    --task 2 \
+    --checkpoint "${CALIBER_WEIGHT}" \
+    --data-root "${DATA_ROOT}" \
+    --split validation \
+    --output-dir "${WORK_ROOT}/raw/caliber" \
+    --device "${DEVICE}"
+"${PYTHON_BIN}" "${SOLUTION}/predict_quantification.py" \
+    --task 2 \
+    --checkpoint "${ARTERY_DENSITY_WEIGHT}" \
+    --data-root "${DATA_ROOT}" \
+    --split validation \
+    --output-dir "${WORK_ROOT}/raw/artery_density" \
+    --device "${DEVICE}"
 
-# V12 and D0044 use CFP-aligned MINIMA FFA.
-"${PYTHON_BIN}" "${SOLUTION}/predict_v12.py" \
-    --checkpoint "${BACKUP_ROOT}/weights/task3/v21_v12_fd_full/final.pt" \
+# Phase geometry and the C-zone vein refiner use CFP-aligned FFA.
+"${PYTHON_BIN}" "${SOLUTION}/predict_phase_geometry.py" \
+    --checkpoint "${PHASE_GEOMETRY_WEIGHT}" \
     --data-root "${DATA_ROOT}" \
     --ffa-root "${REGISTERED_FFA_ROOT}" \
     --split validation \
-    --output-dir "${WORK_ROOT}/raw/v12" \
+    --output-dir "${WORK_ROOT}/raw/phase_geometry" \
     --device "${DEVICE}"
-"${PYTHON_BIN}" "${SOLUTION}/predict_v17_task3_vein.py" \
-    --checkpoint "${BACKUP_ROOT}/weights/task3/d0044_vein_density_full/final.pt" \
-    --parent-checkpoint "${BACKUP_ROOT}/weights/task3/v8_task2_full/final.pt" \
+"${PYTHON_BIN}" "${SOLUTION}/predict_vein_density.py" \
+    --checkpoint "${VEIN_REFINER_WEIGHT}" \
+    --parent-checkpoint "${VEIN_PARENT_WEIGHT}" \
     --data-root "${DATA_ROOT}" \
     --ffa-root "${REGISTERED_FFA_ROOT}" \
     --zone-c-dir "${ZONE_ROOT}" \
     --split validation \
-    --output-dir "${WORK_ROOT}/raw/d0044" \
+    --output-dir "${WORK_ROOT}/raw/vein_density" \
     --device "${DEVICE}"
 
 "${PYTHON_BIN}" "${BIOMARKER}" \
     --data-root "${DATA_ROOT}" --disc-dir "${DISC_ROOT}/validation" \
-    --split validation --source "${WORK_ROOT}/raw/v2" \
+    --split validation --source "${WORK_ROOT}/raw/caliber" \
     --threshold 0.5 --mask-policy vessel_argmax \
-    --output-dir "${WORK_ROOT}/biomarkers/v2"
+    --output-dir "${WORK_ROOT}/biomarkers/caliber"
 
 "${PYTHON_BIN}" "${BIOMARKER}" \
     --data-root "${DATA_ROOT}" --disc-dir "${DISC_ROOT}/validation" \
-    --split validation --source "${WORK_ROOT}/raw/v3" \
+    --split validation --source "${WORK_ROOT}/raw/artery_density" \
     --threshold 0.5 --mask-policy vessel_argmax \
-    --output-dir "${WORK_ROOT}/biomarkers/v3_raw"
+    --output-dir "${WORK_ROOT}/biomarkers/artery_density_raw"
 "${PYTHON_BIN}" "${BIOMARKER}" \
     --data-root "${DATA_ROOT}" --disc-dir "${DISC_ROOT}/validation" \
-    --split validation --source "${WORK_ROOT}/raw/v3" \
+    --split validation --source "${WORK_ROOT}/raw/artery_density" \
     --threshold 0.5 --mask-policy independent_av \
-    --output-dir "${WORK_ROOT}/biomarkers/v3_caliber"
-"${PYTHON_BIN}" "${SOLUTION}/assemble_task3.py" \
-    --base-dir "${WORK_ROOT}/biomarkers/v3_raw" \
-    --caliber-dir "${WORK_ROOT}/biomarkers/v3_caliber" \
-    --calibration "${BACKUP_ROOT}/configs/v3_density_calibration.json" \
-    --output-dir "${WORK_ROOT}/biomarkers/v3_assembled" \
-    --report-output "${WORK_ROOT}/v3_assembly.json" \
+    --output-dir "${WORK_ROOT}/biomarkers/artery_density_caliber"
+"${PYTHON_BIN}" "${SOLUTION}/calibrate_density.py" \
+    --base-dir "${WORK_ROOT}/biomarkers/artery_density_raw" \
+    --caliber-dir "${WORK_ROOT}/biomarkers/artery_density_caliber" \
+    --calibration "${ARTERY_DENSITY_CALIBRATION}" \
+    --output-dir "${WORK_ROOT}/biomarkers/artery_density" \
+    --report-output "${WORK_ROOT}/artery_density_assembly.json" \
     --start-index "${START_INDEX}" --count "${CASE_COUNT}"
 
 "${PYTHON_BIN}" "${SOLUTION}/postprocess_branch_consistency.py" \
-    --input-dir "${WORK_ROOT}/raw/v2" \
+    --input-dir "${WORK_ROOT}/raw/caliber" \
     --masks-dir "${DATA_ROOT}/validation/masks" \
-    --output-dir "${WORK_ROOT}/raw/d0040"
+    --output-dir "${WORK_ROOT}/raw/artery_fd"
 "${PYTHON_BIN}" "${BIOMARKER}" \
     --data-root "${DATA_ROOT}" --disc-dir "${DISC_ROOT}/validation" \
-    --split validation --source "${WORK_ROOT}/raw/d0040" \
+    --split validation --source "${WORK_ROOT}/raw/artery_fd" \
     --threshold 0.5 --mask-policy vessel_argmax \
-    --output-dir "${WORK_ROOT}/biomarkers/d0040"
+    --output-dir "${WORK_ROOT}/biomarkers/artery_fd"
 
 for threshold in 0.4 0.5 0.6; do
     suffix="${threshold/./}"
     "${PYTHON_BIN}" "${BIOMARKER}" \
         --data-root "${DATA_ROOT}" --disc-dir "${DISC_ROOT}/validation" \
-        --split validation --source "${WORK_ROOT}/raw/v12" \
+        --split validation --source "${WORK_ROOT}/raw/phase_geometry" \
         --threshold "${threshold}" --mask-policy vessel_argmax \
-        --output-dir "${WORK_ROOT}/biomarkers/v12_t${suffix}"
+        --output-dir "${WORK_ROOT}/biomarkers/phase_geometry_t${suffix}"
 done
 "${PYTHON_BIN}" "${BIOMARKER}" \
     --data-root "${DATA_ROOT}" --disc-dir "${DISC_ROOT}/validation" \
-    --split validation --source "${WORK_ROOT}/raw/d0044" \
+    --split validation --source "${WORK_ROOT}/raw/vein_density" \
     --threshold 0.5 --mask-policy vessel_argmax \
-    --output-dir "${WORK_ROOT}/biomarkers/d0044"
+    --output-dir "${WORK_ROOT}/biomarkers/vein_density"
 
-"${PYTHON_BIN}" "${SCRIPT_DIR}/assemble_tj009_task3.py" \
-    --v2-dir "${WORK_ROOT}/biomarkers/v2" \
-    --v3-dir "${WORK_ROOT}/biomarkers/v3_assembled" \
-    --d0044-dir "${WORK_ROOT}/biomarkers/d0044" \
-    --d0040-dir "${WORK_ROOT}/biomarkers/d0040" \
-    --v12-per-case \
-        "${WORK_ROOT}/biomarkers/v12_t04/per_case.json" \
-        "${WORK_ROOT}/biomarkers/v12_t05/per_case.json" \
-        "${WORK_ROOT}/biomarkers/v12_t06/per_case.json" \
+"${PYTHON_BIN}" "${SCRIPT_DIR}/assemble_biomarkers.py" \
+    --caliber-dir "${WORK_ROOT}/biomarkers/caliber" \
+    --artery-density-dir "${WORK_ROOT}/biomarkers/artery_density" \
+    --vein-density-dir "${WORK_ROOT}/biomarkers/vein_density" \
+    --artery-fd-dir "${WORK_ROOT}/biomarkers/artery_fd" \
+    --vein-fd-per-case \
+        "${WORK_ROOT}/biomarkers/phase_geometry_t04/per_case.json" \
+        "${WORK_ROOT}/biomarkers/phase_geometry_t05/per_case.json" \
+        "${WORK_ROOT}/biomarkers/phase_geometry_t06/per_case.json" \
     --output-dir "${WORK_ROOT}/build/Task3" \
-    --report-output "${WORK_ROOT}/task3_route_audit.json"
+    --report-output "${WORK_ROOT}/biomarker_assembly.json"
 
 "${PYTHON_BIN}" "${SOLUTION}/compact_submission.py" \
     --source-root "${WORK_ROOT}/build" \
@@ -278,4 +291,4 @@ done
     --start-index "${START_INDEX}" \
     --count "${CASE_COUNT}"
 
-echo "TJ009 inference complete: ${OUTPUT_ZIP}"
+echo "VascFusion inference complete: ${OUTPUT_ZIP}"

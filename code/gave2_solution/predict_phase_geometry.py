@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from gave2v1.data import GAVE2Dataset, case_ids
 from gave2v1.engine import select_device
-from gave2v1.model_v12 import build_v12
+from gave2v1.model_phase_geometry import build_phase_geometry_net
 
 
 def _flip(tensor: torch.Tensor, horizontal: bool, vertical: bool) -> torch.Tensor:
@@ -26,7 +26,10 @@ def _flip(tensor: torch.Tensor, horizontal: bool, vertical: bool) -> torch.Tenso
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Write V12 Task3 source probabilities in [A, vessel, V]."
+        description=(
+            "Write VascFusion-Quant phase-geometry probabilities in "
+            "[A, vessel, V]."
+        )
     )
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--data-root", required=True)
@@ -57,7 +60,7 @@ def main() -> None:
     )
     config = checkpoint["config"]
     size = (int(config["height"]), int(config["width"]))
-    model = build_v12(
+    model = build_phase_geometry_net(
         phase_pretrained=False,
         num_refinements=int(config["num_refinements"]),
     )

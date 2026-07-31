@@ -1,6 +1,6 @@
 <div align="center">
 
-# GAVE2 Challenge 2026 — 第 8 名方案
+# VascFusion：GAVE2 Challenge 2026 第 8 名方案
 
 **基于 CFP 与 FFA 的视网膜动静脉分割及血管生物标志物量化**
 
@@ -8,8 +8,8 @@
 
 </div>
 
-本仓库包含我们参加 MICCAI 2026 GAVE2 Challenge 的**初赛第 8 名方案**的
-训练与推理代码，可复现当前最佳正式提交 **TJ009**，覆盖三个任务：
+本仓库包含 **VascFusion** 的训练与推理代码。VascFusion 是我们参加 MICCAI
+2026 GAVE2 Challenge 的初赛第 8 名方案，覆盖三个任务：
 
 1. 仅使用 CFP 的视网膜动静脉分割；
 2. CFP + FFA 跨模态动静脉分割；
@@ -24,37 +24,19 @@
 
 ## 初赛结果
 
-当前最佳有效线上提交为 **TJ009**。
-
-| 提交 | Task 1 | Task 2 | Task 3 | 总分 |
+| 方法 | Task 1 | Task 2 | Task 3 | 总分 |
 |---|---:|---:|---:|---:|
-| TJ009 | 8.29660 | 8.31706 | 7.39370 | **7.94362** |
+| VascFusion | 8.29660 | 8.31706 | 7.39370 | **7.94362** |
 
 主办方采用 `0.2 × Task1 + 0.4 × Task2 + 0.4 × Task3` 计算总分。本仓库不含
 比赛图像、标注、预测结果或模型权重。
 
 ## 方法概览
 
-```mermaid
-flowchart LR
-    CFP["CFP"] --> T1["V54 CFP 编码器 + 原分辨率细节解码器"]
-    T1 --> O1["Task 1 动静脉概率图"]
+VascFusion 将模态自适应血管分割与解剖结构引导的生物标志物测量结合起来，
+在保留原分辨率血管细节的同时，仅在规则允许的任务中利用造影时相信息。
 
-    CFP --> T2["V54 跨模态网络"]
-    EA["早期 FFA"] --> REG["MINIMA 配准"]
-    LA["晚期 FFA"] --> REG
-    REG --> T2
-    T2 --> O2["Task 2 动静脉概率图"]
-
-    CFP --> BANK["固定 Task 3 模型组"]
-    EA --> BANK
-    LA --> BANK
-    BANK --> GEO["SIVA 分区、几何与拓扑测量"]
-    GEO --> ROUTE["全局固定字段路由"]
-    ROUTE --> O3["七项生物标志物"]
-```
-
-### Task 1 和 Task 2：GAVEV54
+### VascFusion-Seg：模态自适应动静脉分割
 
 - ConvNeXt-Tiny 多尺度 CFP 编码器；
 - U-Net 风格解码器与原分辨率细节分支；
@@ -66,22 +48,18 @@ flowchart LR
 
 Task 1 **严格仅使用 CFP**，训练和推理均不会读取 FFA。
 
-### Task 3：固定字段几何系统
+### VascFusion-Quant：解剖结构引导的指标量化
 
 Task 3 并非直接预测七个标量的黑盒回归器。系统先从分割概率图中按 SIVA 风格
-几何规则提取指标，再应用一个对所有病例完全一致的字段路由：
+几何规则提取指标，并分别针对管径、密度和网络复杂度采用专门的测量分支：
 
-| 生物标志物 | 固定来源 |
+| 生物标志物 | 测量策略 |
 |---|---|
-| CRAE、CRVE、AVR | V2 Task 2，原始未配准 FFA |
-| 动脉密度 | V3 Task 2 + 全局 OOF 校准，原始 FFA |
-| 静脉密度 | D0044 低容量 C 区修正器，配准 FFA |
-| 动脉分形维数 | V2 概率图的确定性分支一致性处理 |
-| 静脉分形维数 | V12 配准 FFA 在 0.4/0.5/0.6 阈值下结果的均值 |
-
-推理阶段不使用标签、榜单反馈或逐病例模型选择。更多细节见
-[模型结构说明](docs/MODEL_ARCHITECTURE_zh-CN.md)和机器可读的
-[TJ009 路由](configs/tj009_route.json)。
+| CRAE、CRVE、AVR | 管径导向的动静脉掩膜与修订 Knudtson–Hubbard 公式 |
+| 动脉密度 | 血管感知动脉掩膜与仅由训练集 OOF 结果确定的校准 |
+| 静脉密度 | 轻量 C 区静脉修正分支 |
+| 动脉分形维数 | 分支一致性动脉骨架与计盒法 |
+| 静脉分形维数 | 三个固定阈值下的时相感知静脉几何均值 |
 
 ## 仓库结构
 
@@ -89,13 +67,12 @@ Task 3 并非直接预测七个标量的黑盒回归器。系统先从分割概�
 .
 ├── README.md / README_zh-CN.md
 ├── code/
-│   ├── run_tj009_inference.sh       # 端到端推理与打包
-│   ├── assemble_tj009_task3.py      # Task 3 七字段精确组装
+│   ├── run_inference.sh             # 端到端推理与打包
+│   ├── assemble_biomarkers.py       # 七项生物标志物组装
 │   ├── biomarker_tools/             # 视盘与血管几何测量
 │   ├── external/MINIMA/             # Apache-2.0 MINIMA 源码快照
 │   └── gave2_solution/              # 模型、训练、预测与后处理
 ├── configs/                         # 训练配置、路由和权重清单
-├── docs/
 ├── weights/                         # 不提交权重，只保留路径说明
 ├── environment.yml
 └── requirements.txt
@@ -153,14 +130,14 @@ MINIMA 权重也可从其
 [官方 Release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt)
 下载。
 
-## 复现 TJ009 推理
+## 复现 VascFusion 推理
 
 准备好数据和权重后运行：
 
 ```bash
-bash code/run_tj009_inference.sh \
+bash code/run_inference.sh \
   --data-root /absolute/path/GAVE2_private \
-  --work-root /absolute/path/tj009_work \
+  --work-root /absolute/path/vascfusion_work \
   --output-zip /absolute/path/kawhi00.zip \
   --python "$(which python)" \
   --device cuda
@@ -171,9 +148,9 @@ bash code/run_tj009_inference.sh \
 
 1. 用 MINIMA-LoFTR 将早/晚期 FFA 分别配准至 CFP；
 2. 检测视盘并生成 SIVA C 区；
-3. V54 Task 1/Task 2 推理；
-4. V2/V3/V12/D0044 Task 3 概率推理；
-5. 确定性生物标志物提取和固定字段组装；
+3. 使用 VascFusion-Seg 完成 Task 1/Task 2 推理；
+4. 运行管径、密度和时相几何测量分支；
+5. 使用 VascFusion-Quant 确定性提取并组装指标；
 6. 不改变 0.5 阈值判断的概率图压缩；
 7. 校验并生成提交 ZIP。
 
@@ -186,16 +163,17 @@ Task3/g_xxx.txt  # 七项生物标志物
 ```
 
 脚本不会覆盖已有工作目录或 ZIP。如果已有经过核验的配准、视盘或 C 区缓存，
-可通过 `bash code/run_tj009_inference.sh --help` 查看可选缓存参数。
+可通过 `bash code/run_inference.sh --help` 查看可选缓存参数。
 
 ## 从头训练
 
 以下命令同时支持交叉验证与全数据训练，均对应仓库内真实入口。若希望精确复现，
 可以修改路径，但不要修改超参数。
 
-### 1. 训练 V1 初始化权重
+### 1. 训练第一阶段初始化权重
 
-TJ009 的正式模型分别从 Task 1/Task 2 的 V1 Fold-0 权重初始化。训练 Fold 0：
+VascFusion-Seg 正式模型分别从 Task 1/Task 2 的 Fold-0 第一阶段权重初始化。
+训练 Fold 0：
 （如需完整 CV，将 fold 依次设为 0–4。）
 
 ```bash
@@ -232,41 +210,121 @@ python code/gave2_solution/register_ffa_minima.py \
 ### 3. 训练最终 Task 1 与 Task 2
 
 ```bash
-python code/gave2_solution/train_full_variant.py \
-  --variant v54 --task 1 --data-root "$DATA" \
-  --output-dir "$RUNS/tj009/task1" \
+python code/gave2_solution/train_segmentation.py \
+  --task 1 --data-root "$DATA" \
+  --output-dir "$RUNS/vascfusion/task1" \
   --init-checkpoint "$RUNS/init/task1/fold0/best.pt" \
   --epochs 48 --size 1024x1536 --batch-size 1 \
   --accumulation-steps 2 --learning-rate 1.5e-4 \
   --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
   --warmup-epochs 2 --freeze-encoder-epochs 1 \
-  --ema-decay 0.995 --r2-steps 5 --hard-gap-weight 0.25 \
+  --ema-decay 0.995 --refinement-steps 5 --hard-gap-weight 0.25 \
   --seed 77 --device cuda --num-workers 0
 
-python code/gave2_solution/train_full_variant.py \
-  --variant v54 --task 2 --data-root "$DATA" --ffa-root "$REGISTERED" \
-  --output-dir "$RUNS/tj009/task2" \
+python code/gave2_solution/train_segmentation.py \
+  --task 2 --data-root "$DATA" --ffa-root "$REGISTERED" \
+  --output-dir "$RUNS/vascfusion/task2" \
   --init-checkpoint "$RUNS/init/task2/fold0/best.pt" \
   --epochs 37 --size 1024x1536 --batch-size 1 \
   --accumulation-steps 2 --learning-rate 1.5e-4 \
   --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
   --warmup-epochs 2 --freeze-encoder-epochs 1 \
-  --ema-decay 0.995 --r2-steps 5 --hard-gap-weight 0.25 \
+  --ema-decay 0.995 --refinement-steps 5 --hard-gap-weight 0.25 \
   --seed 77 --device cuda --num-workers 0
 ```
 
 对应 Task 1 的 1,200 次、Task 2 的 925 次 optimizer update。
 
-### 4. 训练 Task 3 各来源
+### 4. 准备视盘与 SIVA C 区
 
-Task 3 由多个全局固定来源构成，而不是单一 checkpoint。完整真实命令见
-[Task 3 训练文档](docs/TRAINING_zh-CN.md#task-3-来源训练)。核心约束如下：
+```bash
+python code/biomarker_tools/local_optic_disc.py \
+  --data-root "$DATA" \
+  --weights weights/external/Model_DiscSeg_ORIGA.h5 \
+  --output-dir "$PWD/cache/disc_masks" --split all --device cuda
 
-- V2/V3 使用原始未配准 FFA；
-- V8/V12 使用 MINIMA 配准 FFA；
-- D0044 冻结 V8，仅训练低容量 C 区静脉修正器；
-- `configs/v3_density_calibration.json` 来自训练集 OOF 预测，绝不能在测试集
-  重新拟合。
+python code/gave2_solution/prepare_zone_c_masks.py \
+  --disc-dir "$PWD/cache/disc_masks/training" \
+  --output-dir "$PWD/cache/zone_c/training" \
+  --report-output "$PWD/cache/zone_c/training_report.json"
+```
+
+### 5. 训练 VascFusion-Quant
+
+指标量化系统使用多个针对不同测量目标的分割派生分支，并统一从 Task 2 Fold-0
+第一阶段权重初始化：
+
+```bash
+export INIT_T2="$RUNS/init/task2/fold0/best.pt"
+```
+
+**管径分支——使用原始 FFA 几何：**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --data-root "$DATA" --output-dir "$RUNS/quant/caliber" \
+  --epochs 47 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0 --seed 77 --device cuda \
+  --num-workers 0 --no-pretrained --init-checkpoint "$INIT_T2"
+```
+
+**动脉密度分支——使用原始 FFA 几何：**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --data-root "$DATA" --output-dir "$RUNS/quant/artery_density" \
+  --epochs 47 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0.25 --seed 77 --device cuda \
+  --num-workers 0 --no-pretrained --init-checkpoint "$INIT_T2"
+```
+
+`configs/artery_density_calibration.json` 仅由训练集 OOF 预测确定，推理阶段保持固定。
+
+**静脉密度的配准 FFA 父网络：**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --data-root "$DATA" --ffa-root "$REGISTERED" \
+  --output-dir "$RUNS/quant/vein_parent" \
+  --epochs 48 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0.25 --seed 77 --device cuda \
+  --num-workers 0 --no-pretrained --init-checkpoint "$INIT_T2"
+```
+
+**分形维数的时相几何分支：**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --phase-geometry --data-root "$DATA" \
+  --ffa-root "$REGISTERED" --output-dir "$RUNS/quant/phase_geometry" \
+  --epochs 48 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0.25 --seed 77 --device cuda \
+  --num-workers 0 --init-checkpoint "$INIT_T2"
+```
+
+**轻量 C 区静脉修正器：**
+
+```bash
+python code/gave2_solution/train_vein_refiner.py \
+  --data-root "$DATA" --ffa-root "$REGISTERED" \
+  --zone-c-dir "$PWD/cache/zone_c/training" \
+  --parent-checkpoint "$RUNS/quant/vein_parent/final.pt" \
+  --output-dir "$RUNS/quant/vein_refiner" \
+  --size 1024x1536 --epochs 24 --accumulation-steps 2 \
+  --learning-rate 3e-4 --weight-decay 1e-4 --warmup-epochs 2 \
+  --ema-decay 0.995 --seed 77 --device cuda --num-workers 0 \
+  --loss-policy vessel_argmax
+```
+
+最后阶段仅更新轻量 C 区修正器，其父网络保持冻结。
 
 ## 评测与提交约束
 

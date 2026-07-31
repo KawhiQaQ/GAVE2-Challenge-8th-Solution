@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train the frozen-parent V17 vein-density refiner on all labeled cases."""
+"""Train the frozen-parent VascFusion-Quant vein-density refiner."""
 
 from __future__ import annotations
 
@@ -22,9 +22,12 @@ from gave2v1.engine import (
     seed_everything,
     select_device,
 )
-from gave2v1.model_v17 import GAVEV17Task3, load_v8_parent
-from train_v17_task3_vein import (
-    V17Config,
+from gave2v1.model_vein_refinement import (
+    VeinDensityRefinementNet,
+    load_vein_parent,
+)
+from train_vein_refiner_cv import (
+    VeinRefinerConfig,
     masked_vein_loss,
     policy_aligned_vein_loss,
     update_ema,
@@ -85,8 +88,8 @@ def main() -> None:
 
     seed_everything(args.seed)
     device = select_device(args.device)
-    parent, parent_report = load_v8_parent(parent_checkpoint)
-    model = GAVEV17Task3(parent).to(device)
+    parent, parent_report = load_vein_parent(parent_checkpoint)
+    model = VeinDensityRefinementNet(parent).to(device)
     height, width = args.size
     dataset = GAVE2Dataset(
         data_root,
@@ -107,7 +110,7 @@ def main() -> None:
         num_workers=args.num_workers,
         pin_memory=device.type == "cuda",
     )
-    config = V17Config(
+    config = VeinRefinerConfig(
         fold=-1,
         n_folds=5,
         seed=args.seed,
@@ -240,7 +243,7 @@ def main() -> None:
         "parent": parent_report,
         "epoch": args.epochs,
         "metrics": {"train_total": history[-1]["train_total"]},
-        "architecture": GAVEV17Task3.architecture_name,
+        "architecture": VeinDensityRefinementNet.architecture_name,
     }
     torch.save(checkpoint, output_dir / "final.pt")
     summary = {

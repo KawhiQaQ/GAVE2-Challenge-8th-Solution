@@ -12,16 +12,18 @@ import torch.nn.functional as F
 
 from gave2v1.data import GAVE2Dataset, case_ids
 from gave2v1.engine import select_device
-from gave2v1.model_v17 import (
-    GAVEV17Task3,
-    load_compact_v17_state,
-    load_v8_parent,
+from gave2v1.model_vein_refinement import (
+    VeinDensityRefinementNet,
+    load_compact_refiner_state,
+    load_vein_parent,
 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Write V17 Task3 [A, vessel, refined vein] maps."
+        description=(
+            "Write VascFusion-Quant C-zone vein-density probability maps."
+        )
     )
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--parent-checkpoint", required=True)
@@ -45,9 +47,9 @@ def main() -> None:
         weights_only=False,
     )
     config = checkpoint["config"]
-    parent, parent_report = load_v8_parent(args.parent_checkpoint)
-    model = GAVEV17Task3(parent)
-    load_report = load_compact_v17_state(
+    parent, parent_report = load_vein_parent(args.parent_checkpoint)
+    model = VeinDensityRefinementNet(parent)
+    load_report = load_compact_refiner_state(
         model,
         checkpoint["refiner"],
     )

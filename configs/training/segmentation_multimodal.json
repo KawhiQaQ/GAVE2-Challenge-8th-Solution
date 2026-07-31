@@ -17,26 +17,17 @@
   "ema_decay": 0.995,
   "device": "cuda",
   "data_root": "<DATA_ROOT>",
-  "output_dir": "<RUN_ROOT>/tj009/task2",
+  "output_dir": "<RUN_ROOT>/vascfusion/task2",
   "pretrained": false,
   "num_refinements": 5,
   "hard_gap_weight": 0.25,
   "ffa_root": "<REGISTERED_FFA_ROOT>",
   "full_training": true,
-  "variant": "v54",
+  "method": "VascFusion-Seg",
   "native_final_refiner": false,
-  "retfound_checkpoint": "",
-  "retfound_sha256": "",
-  "retfound_input_height": 364,
-  "retfound_input_width": 546,
-  "retfound_layer_indices": [
-    23
-  ],
-  "retfound_frozen": true,
   "physiology_detail": false,
   "optical_density_detail": false,
   "phase_balance_detail": false,
   "r2_steps": 5,
-  "public_r2_weights_loaded": false,
   "same_fold_v1_first_stage": true
 }

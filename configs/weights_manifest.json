@@ -1,55 +1,55 @@
 {
   "schema_version": 1,
-  "release": "TJ009",
+  "release": "VascFusion preliminary model bundle",
   "weights_in_git": false,
   "download": {
-    "tj009_bundle": "TO_BE_RELEASED_AFTER_THE_COMPETITION",
+    "vascfusion_bundle": "TO_BE_RELEASED_AFTER_THE_COMPETITION",
     "minima_official": "https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt"
   },
   "files": [
     {
-      "path": "weights/initialization/v1_task1_fold0/best.pt",
-      "purpose": "Task 1 V54 training initialization",
+      "path": "weights/initialization/task1_fold0.pt",
+      "purpose": "Task 1 VascFusion-Seg training initialization",
       "sha256": "b3e39da0c85625589c5ad1751954c0758920fc21fbee89334d55775084e96ab4"
     },
     {
-      "path": "weights/initialization/v1_task2_fold0/best.pt",
-      "purpose": "Task 2 and Task 3 training initialization",
+      "path": "weights/initialization/task2_fold0.pt",
+      "purpose": "Task 2 VascFusion-Seg and VascFusion-Quant initialization",
       "sha256": "3516944b9a83189e56c2b2a5619a225ce4ec86b54b5887c3e9f18cd077d5ebf9"
     },
     {
-      "path": "weights/task1/tj009_v54_full/final.pt",
-      "purpose": "TJ009 Task 1",
+      "path": "weights/task1/segmentation_cfp.pt",
+      "purpose": "VascFusion-Seg Task 1",
       "sha256": "34be0983ace35d0fbf1c3760bf7142c56ed2b8e70d375d7efd2d0e872e3264ad"
     },
     {
-      "path": "weights/task2/tj009_v54_full/final.pt",
-      "purpose": "TJ009 Task 2",
+      "path": "weights/task2/segmentation_multimodal.pt",
+      "purpose": "VascFusion-Seg Task 2",
       "sha256": "26b62c1e98c4f88f485bc3cacdbd9c5be25aab895c59135d8c94811cd3e0afcc"
     },
     {
-      "path": "weights/task3/v2_task2_full/final.pt",
-      "purpose": "Task 3 CRAE/CRVE/AVR and artery-FD source",
+      "path": "weights/task3/caliber_expert.pt",
+      "purpose": "VascFusion-Quant caliber and artery-FD expert",
       "sha256": "6be00df1d904372375c21b3cda843019a5e7efe7d079eb30da3d78490b93f805"
     },
     {
-      "path": "weights/task3/v3_task2_full/final.pt",
-      "purpose": "Task 3 artery-density source",
+      "path": "weights/task3/artery_density_expert.pt",
+      "purpose": "VascFusion-Quant artery-density expert",
       "sha256": "0fdc61893d62aec261d7f1fdb9897566e4d00c6c7fe97f3d226ca5ab2fa2ef60"
     },
     {
-      "path": "weights/task3/v8_task2_full/final.pt",
-      "purpose": "Task 3 D0044 frozen parent",
+      "path": "weights/task3/vein_density_parent.pt",
+      "purpose": "VascFusion-Quant frozen vein-density parent",
       "sha256": "cdd6b93647c951c7c0b8e278bced0b636af1a22d02a5565ca270cff6f8caa3aa"
     },
     {
-      "path": "weights/task3/v21_v12_fd_full/final.pt",
-      "purpose": "Task 3 vein fractal-dimension source",
+      "path": "weights/task3/phase_geometry_expert.pt",
+      "purpose": "VascFusion-Quant vein fractal-dimension expert",
       "sha256": "1baf1f8afbdb85de32579d681501b895263fd5e24ff1110d101920c6b94fe115"
     },
     {
-      "path": "weights/task3/d0044_vein_density_full/final.pt",
-      "purpose": "Task 3 vein-density refiner",
+      "path": "weights/task3/vein_density_refiner.pt",
+      "purpose": "VascFusion-Quant compact C-zone vein refiner",
       "sha256": "c981f8fca143b1c2ed0585808b79e4e5bb8634167d41c26c1777500887340fb0"
     },
     {
@@ -64,4 +64,3 @@
     }
   ]
 }
-

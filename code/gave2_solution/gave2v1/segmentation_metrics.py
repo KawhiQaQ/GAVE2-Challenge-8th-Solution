@@ -41,7 +41,7 @@ def expected_path_feasibility(
 
 
 @dataclass
-class V2MetricAccumulator:
+class SegmentationMetricAccumulator:
     threshold: float = 0.5
     intersections: np.ndarray = field(
         default_factory=lambda: np.zeros(3, dtype=np.float64)

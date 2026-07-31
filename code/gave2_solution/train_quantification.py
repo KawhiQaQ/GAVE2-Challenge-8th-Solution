@@ -5,7 +5,7 @@ import argparse
 import json
 import math
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
 import torch
@@ -18,43 +18,26 @@ from gave2v1.engine import (
     seed_everything,
     select_device,
 )
-from gave2v1.engine_v2 import (
-    V2FitConfig,
+from gave2v1.training_engine import (
+    FitConfig,
     build_optimizer,
     save_checkpoint,
     set_encoder_trainable,
     train_one_epoch,
 )
-from gave2v1.losses_v2 import GAVEV2Loss, V2LossWeights
-from gave2v1.model_v2 import warm_start_v2
-from gave2v1.model_v14 import (
-    RETFOUND_INPUT_SIZE,
-    RETFOUND_LAYER_INDICES,
-    build_v14,
-    warm_start_v14,
+from gave2v1.model_core import (
+    build_retinal_vessel_net,
+    warm_start_retinal_vessel_net,
 )
-from gave2v1.model_v28 import build_v28
-from gave2v1.model_v30 import build_v30, warm_start_v30
-from gave2v1.model_v54 import build_v54, warm_start_v54
+from gave2v1.model_phase_geometry import (
+    build_phase_geometry_net,
+    warm_start_phase_geometry_net,
+)
+from gave2v1.topology_losses import TopologyAwareLoss, TopologyLossWeights
 
 
-@dataclass
-class FullVariantConfig(V2FitConfig):
-    full_training: bool = True
-    variant: str = ""
-    native_final_refiner: bool = False
-    retfound_checkpoint: str = ""
-    retfound_sha256: str = ""
-    retfound_input_height: int = RETFOUND_INPUT_SIZE[0]
-    retfound_input_width: int = RETFOUND_INPUT_SIZE[1]
-    retfound_layer_indices: tuple[int, ...] = RETFOUND_LAYER_INDICES
-    retfound_frozen: bool = True
-    physiology_detail: bool = False
-    optical_density_detail: bool = False
-    phase_balance_detail: bool = False
-    r2_steps: int = 0
-    public_r2_weights_loaded: bool = False
-    same_fold_v1_first_stage: bool = False
+ROOT = Path(__file__).resolve().parent
+DEFAULT_DATA = ROOT.parent / "GAVE2_preliminary"
 
 
 def parse_size(value: str) -> tuple[int, int]:
@@ -66,35 +49,20 @@ def parse_size(value: str) -> tuple[int, int]:
     return height, width
 
 
-def parse_retfound_size(value: str) -> tuple[int, int]:
-    height, width = (int(part) for part in value.lower().split("x"))
-    if height % 14 or width % 14:
-        raise argparse.ArgumentTypeError(
-            "RETFound height and width must be divisible by 14"
-        )
-    return height, width
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train a promoted GAVE2 variant on all 50 labels."
-    )
-    parser.add_argument(
-        "--variant",
-        choices=("v14", "v28", "v30", "v54"),
-        required=True,
+        description="Train a VascFusion-Quant measurement branch on all labels."
     )
     parser.add_argument("--task", type=int, choices=(1, 2), required=True)
-    parser.add_argument("--data-root", required=True)
-    parser.add_argument("--ffa-root")
-    parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--init-checkpoint", required=True)
-    parser.add_argument("--retfound-checkpoint")
+    parser.add_argument("--data-root", default=str(DEFAULT_DATA))
     parser.add_argument(
-        "--retfound-size",
-        type=parse_retfound_size,
-        default=RETFOUND_INPUT_SIZE,
+        "--ffa-root",
+        help=(
+            "Optional root containing split/FFA_A and split/FFA_AV. "
+            "Task1 must omit this; Task2 may use a frozen registered cache."
+        ),
     )
+    parser.add_argument("--output-dir", required=True)
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--size", type=parse_size, default=(1024, 1536))
     parser.add_argument("--batch-size", type=int, default=1)
@@ -106,35 +74,41 @@ def main() -> None:
     parser.add_argument("--freeze-encoder-epochs", type=int, default=1)
     parser.add_argument("--ema-decay", type=float, default=0.995)
     parser.add_argument("--num-refinements", type=int, default=3)
-    parser.add_argument("--r2-steps", type=int, default=5)
-    parser.add_argument("--hard-gap-weight", type=float, default=0.25)
+    parser.add_argument(
+        "--hard-gap-weight",
+        type=float,
+        default=0.0,
+        help="Weight for the weakest-centerline gap loss.",
+    )
     parser.add_argument("--seed", type=int, default=77)
-    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--device", default="auto")
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--no-pretrained", action="store_true")
     parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument(
+        "--phase-geometry",
+        action="store_true",
+        help=(
+            "Use the full FFA phase-geometry architecture. This is "
+            "Task 2-only and requires --ffa-root."
+        ),
+    )
+    parser.add_argument("--init-checkpoint", required=True)
     args = parser.parse_args()
 
     if args.epochs < 1:
         raise ValueError("--epochs must be positive")
     if args.hard_gap_weight < 0:
         raise ValueError("--hard-gap-weight must be non-negative")
-    if args.r2_steps < 1:
-        raise ValueError("--r2-steps must be positive")
-    if args.task == 1 and args.ffa_root:
-        raise ValueError("Task1 full training is strictly CFP-only")
-    if args.task == 2 and not args.ffa_root:
-        raise ValueError("Task2 full training requires --ffa-root")
-    if args.variant == "v14" and not args.retfound_checkpoint:
-        raise ValueError("V14 requires --retfound-checkpoint")
-    if args.variant != "v14" and args.retfound_checkpoint:
-        raise ValueError(
-            f"{args.variant.upper()} must not receive --retfound-checkpoint"
-        )
-
     data_root = Path(args.data_root).resolve()
     ffa_root = Path(args.ffa_root).resolve() if args.ffa_root else None
+    if args.task == 1 and ffa_root is not None:
+        raise ValueError("Task1 full training must not receive --ffa-root")
+    if args.phase_geometry and args.task != 2:
+        raise ValueError("--phase-geometry is valid only for Task 2")
+    if args.phase_geometry and ffa_root is None:
+        raise ValueError("--phase-geometry requires --ffa-root")
     output_dir = Path(args.output_dir).resolve()
-    init_checkpoint = Path(args.init_checkpoint).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     device = select_device(args.device)
     seed_everything(args.seed)
@@ -142,7 +116,6 @@ def main() -> None:
     if len(ids) != 50:
         raise ValueError(f"Expected 50 labeled cases, found {len(ids)}")
     height, width = args.size
-
     dataset = GAVE2Dataset(
         data_root,
         ids,
@@ -160,59 +133,26 @@ def main() -> None:
         pin_memory=device.type == "cuda",
         drop_last=False,
     )
-
-    retfound_report: dict[str, object] | None = None
-    if args.variant == "v54":
-        model = build_v54(
-            task=args.task,
-            pretrained=False,
-            r2_steps=args.r2_steps,
-        )
-        initialization = {
-            "source": str(init_checkpoint),
-            "same_fold_v1_first_stage": True,
-            "public_r2_weights_loaded": False,
-            **warm_start_v54(model, init_checkpoint),
-        }
-    elif args.variant == "v28":
-        model = build_v28(
-            task=args.task,
-            pretrained=False,
-            num_refinements=args.num_refinements,
-        )
-        initialization: dict[str, object] = {
-            "source": str(init_checkpoint),
-            **warm_start_v2(model, init_checkpoint),
-        }
-    elif args.variant == "v30":
-        model = build_v30(
-            task=args.task,
-            pretrained=False,
+    if args.phase_geometry:
+        model = build_phase_geometry_net(
+            phase_pretrained=not args.no_pretrained,
             num_refinements=args.num_refinements,
         )
         initialization = {
-            "source": str(init_checkpoint),
-            **warm_start_v30(model, init_checkpoint),
+            "source": str(Path(args.init_checkpoint).resolve()),
+            **warm_start_phase_geometry_net(model, args.init_checkpoint),
         }
     else:
-        model = build_v14(
-            task=args.task,
-            retfound_checkpoint=args.retfound_checkpoint,
-            pretrained=False,
+        model = build_retinal_vessel_net(
+            args.task,
+            pretrained=not args.no_pretrained,
             num_refinements=args.num_refinements,
-            retfound_input_size=args.retfound_size,
         )
-        retfound_report = model.retfound_encoder.load_report
         initialization = {
-            "source": str(init_checkpoint),
-            "retfound": retfound_report,
-            "parent_warm_start": warm_start_v14(
-                model,
-                init_checkpoint,
-            ),
+            "source": str(Path(args.init_checkpoint).resolve()),
+            **warm_start_retinal_vessel_net(model, args.init_checkpoint),
         }
-
-    config = FullVariantConfig(
+    config = FitConfig(
         task=args.task,
         fold=-1,
         n_folds=5,
@@ -232,49 +172,23 @@ def main() -> None:
         device=str(device),
         data_root=str(data_root),
         output_dir=str(output_dir),
-        pretrained=False,
-        num_refinements=(
-            args.r2_steps
-            if args.variant == "v54"
-            else args.num_refinements
-        ),
+        pretrained=not args.no_pretrained,
+        num_refinements=args.num_refinements,
         hard_gap_weight=args.hard_gap_weight,
         ffa_root=str(ffa_root) if ffa_root is not None else None,
-        variant=args.variant,
-        native_final_refiner=(
-            args.variant == "v28"
-            or (args.variant == "v30" and args.task == 1)
-            or (args.variant == "v54" and args.task == 1)
-        ),
-        physiology_detail=(
-            args.variant == "v30"
-            or (args.variant == "v54" and args.task == 1)
-        ),
-        optical_density_detail=(
-            args.variant in ("v30", "v54") and args.task == 1
-        ),
-        phase_balance_detail=args.variant == "v30" and args.task == 2,
-        retfound_checkpoint=(
-            str(Path(args.retfound_checkpoint).resolve())
-            if args.retfound_checkpoint
-            else ""
-        ),
-        retfound_sha256=(
-            model.retfound_encoder.checkpoint_sha256
-            if args.variant == "v14"
-            else ""
-        ),
-        retfound_input_height=args.retfound_size[0],
-        retfound_input_width=args.retfound_size[1],
-        retfound_layer_indices=tuple(RETFOUND_LAYER_INDICES),
-        retfound_frozen=True,
-        r2_steps=args.r2_steps if args.variant == "v54" else 0,
-        public_r2_weights_loaded=False,
-        same_fold_v1_first_stage=args.variant == "v54",
     )
     split = {"training": ids, "validation": []}
     (output_dir / "config.json").write_text(
-        json.dumps(asdict(config), indent=2),
+        json.dumps(
+            {
+                **asdict(config),
+                "full_training": True,
+                "probability_refinement_recipe": args.hard_gap_weight == 0.0,
+                "hard_gap_recipe": args.hard_gap_weight > 0.0,
+                "phase_geometry": args.phase_geometry,
+            },
+            indent=2,
+        ),
         encoding="utf-8",
     )
     (output_dir / "split.json").write_text(
@@ -287,8 +201,8 @@ def main() -> None:
     )
 
     model.to(device)
-    loss_function = GAVEV2Loss(
-        weights=V2LossWeights(hard_gap=args.hard_gap_weight),
+    loss_function = TopologyAwareLoss(
+        weights=TopologyLossWeights(hard_gap=args.hard_gap_weight),
     ).to(device)
     optimizer = build_optimizer(model, config)
     updates_per_epoch = math.ceil(
@@ -302,35 +216,29 @@ def main() -> None:
     scaler = torch.cuda.amp.GradScaler(enabled=device.type == "cuda")
     ema = ModelEMA(model, decay=args.ema_decay)
     history: list[dict[str, object]] = []
-
     print(
         json.dumps(
             {
                 "architecture": model.architecture_name,
-                "variant": args.variant,
                 "device": str(device),
-                "total_parameters": sum(
+                "parameters": sum(
                     parameter.numel() for parameter in model.parameters()
                 ),
-                "trainable_parameters": sum(
-                    parameter.numel()
-                    for parameter in model.parameters()
-                    if parameter.requires_grad
-                ),
                 "task": args.task,
-                "task1_ffa_loaded": False,
                 "training_cases": len(ids),
                 "epochs": args.epochs,
                 "size": [height, width],
                 "hard_gap_weight": args.hard_gap_weight,
-                "r2_steps": (
-                    args.r2_steps if args.variant == "v54" else None
-                ),
                 "ffa_root": (
                     str(ffa_root) if ffa_root is not None else None
                 ),
                 "updates_per_epoch": updates_per_epoch,
-                "retfound": retfound_report,
+                "phase_geometry": args.phase_geometry,
+                "initial_phase_fusion_strengths": (
+                    model.phase_fusion_strengths().detach().tolist()
+                    if args.phase_geometry
+                    else None
+                ),
                 "initialization": initialization,
             },
             indent=2,
@@ -394,7 +302,6 @@ def main() -> None:
         {"training": history[-1]["training"], "full_training": True},
     )
     summary = {
-        "variant": args.variant,
         "epochs_completed": args.epochs,
         "optimizer_updates": args.epochs * updates_per_epoch,
         "final_checkpoint": str(output_dir / "final.pt"),

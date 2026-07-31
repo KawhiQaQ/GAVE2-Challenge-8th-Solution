@@ -8,7 +8,7 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 
 from .model import ConvNeXtFeatures, _groups
-from .model_v2 import GAVEV2, warm_start_v2
+from .model_core import RetinalVesselNet, warm_start_retinal_vessel_net
 
 
 class ResidualPhaseFusion(nn.Module):
@@ -57,7 +57,7 @@ class ResidualPhaseFusion(nn.Module):
         return parent + self.strength() * residual
 
 
-class GAVEV12(GAVEV2):
+class PhaseGeometryNet(RetinalVesselNet):
     """Task3 geometry model with a full pretrained FFA feature encoder.
 
     The historical lightweight FFA pyramid and its learned parent fusions are
@@ -67,7 +67,7 @@ class GAVEV12(GAVEV2):
     used; Task3 values remain deterministic functions of dense A/V geometry.
     """
 
-    architecture_name = "GAVEV12-DualScaleFullPhaseEncoder-RecurrentTopology"
+    architecture_name = "VascFusion-PhaseGeometry"
 
     # Statistics were computed once from the 40 Fold0 training inputs after
     # the dataset's fixed robust FFA normalization. No validation labels or
@@ -146,23 +146,23 @@ class GAVEV12(GAVEV2):
         )
 
 
-def build_v12(
+def build_phase_geometry_net(
     *,
     phase_pretrained: bool = True,
     num_refinements: int = 3,
-) -> GAVEV12:
-    return GAVEV12(
+) -> PhaseGeometryNet:
+    return PhaseGeometryNet(
         phase_pretrained=phase_pretrained,
         num_refinements=num_refinements,
     )
 
 
-def warm_start_v12(
-    model: GAVEV12,
+def warm_start_phase_geometry_net(
+    model: PhaseGeometryNet,
     checkpoint_path: str | Path,
 ) -> dict[str, object]:
     report: dict[str, object] = {
-        **warm_start_v2(model, checkpoint_path),
+        **warm_start_retinal_vessel_net(model, checkpoint_path),
         "phase_encoder_source": "torchvision ImageNet ConvNeXt-Tiny",
     }
     return report

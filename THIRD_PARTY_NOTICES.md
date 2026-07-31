@@ -8,7 +8,7 @@
 - Included material: source snapshot under `code/external/MINIMA/`; the upstream
   license is retained at `code/external/MINIMA/LICENSE`
 - Checkpoint: not included; download from the upstream release or the future
-  TJ009 checkpoint bundle
+  VascFusion checkpoint bundle
 
 Please cite the MINIMA paper when using the registration component:
 
@@ -38,4 +38,3 @@ licenses and cite ConvNeXt where appropriate.
 
 Third-party components remain governed by their original terms, independently
 of the license eventually selected for our original code.
-

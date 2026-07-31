@@ -1,6 +1,6 @@
 <div align="center">
 
-# GAVE2 Challenge 2026 — 8th-Place Solution
+# VascFusion: GAVE2 Challenge 2026 — 8th-Place Solution
 
 **Retinal artery/vein segmentation and vascular biomarker quantification from CFP and FFA**
 
@@ -12,9 +12,9 @@
 
 </div>
 
-This repository contains the training and inference code for our **8th-place
-preliminary-round solution** to the MICCAI 2026 GAVE2 Challenge. The code
-reproduces our best submitted system, **TJ009**, covering all three tasks:
+This repository contains the training and inference code for **VascFusion**,
+our 8th-place preliminary-round solution to the MICCAI 2026 GAVE2 Challenge.
+VascFusion covers all three tasks:
 
 1. CFP-only retinal artery/vein segmentation;
 2. CFP + FFA cross-modal artery/vein segmentation;
@@ -31,11 +31,9 @@ reproduces our best submitted system, **TJ009**, covering all three tasks:
 
 ## Preliminary results
 
-Our best valid online submission is **TJ009**.
-
-| Submission | Task 1 | Task 2 | Task 3 | Overall |
+| Method | Task 1 | Task 2 | Task 3 | Overall |
 |---|---:|---:|---:|---:|
-| TJ009 | 8.29660 | 8.31706 | 7.39370 | **7.94362** |
+| VascFusion | 8.29660 | 8.31706 | 7.39370 | **7.94362** |
 
 The overall score is computed by the organizer as
 `0.2 × Task1 + 0.4 × Task2 + 0.4 × Task3`. The repository does not contain
@@ -43,26 +41,11 @@ competition images, annotations, predictions, or checkpoints.
 
 ## Method overview
 
-```mermaid
-flowchart LR
-    CFP["CFP"] --> T1["V54 CFP encoder + native-detail decoder"]
-    T1 --> O1["Task 1 A/V probabilities"]
+VascFusion combines modality-adaptive vessel segmentation with anatomy-guided
+biomarker measurement. It preserves full-resolution vascular detail while
+using angiographic phase information only where the task permits it.
 
-    CFP --> T2["V54 cross-modal network"]
-    EA["Early FFA"] --> REG["MINIMA registration"]
-    LA["Late FFA"] --> REG
-    REG --> T2
-    T2 --> O2["Task 2 A/V probabilities"]
-
-    CFP --> BANK["Fixed Task 3 model bank"]
-    EA --> BANK
-    LA --> BANK
-    BANK --> GEO["SIVA-zone geometry and topology"]
-    GEO --> ROUTE["Global fixed field router"]
-    ROUTE --> O3["Seven biomarkers"]
-```
-
-### Task 1 and Task 2: GAVEV54
+### VascFusion-Seg: modality-adaptive A/V segmentation
 
 - ConvNeXt-Tiny multi-scale CFP encoder;
 - U-Net-like decoder with a native-resolution detail stem;
@@ -75,23 +58,19 @@ flowchart LR
 Task 1 is **strictly CFP-only**. Neither training nor inference reads FFA for
 Task 1.
 
-### Task 3: fixed-field geometry system
+### VascFusion-Quant: anatomy-guided biomarker quantification
 
 Task 3 is not a black-box scalar regressor. We first extract biomarkers from
-segmentation probabilities using SIVA-style geometry and then apply one global,
-case-independent field route:
+segmentation probabilities using SIVA-style geometry. Specialized measurement
+branches are optimized for vessel caliber, density, and network complexity:
 
-| Biomarker | Frozen source |
+| Biomarker | Measurement strategy |
 |---|---|
-| CRAE, CRVE, AVR | V2 Task 2, original unregistered FFA |
-| artery density | V3 Task 2 + global OOF calibration, original FFA |
-| vein density | D0044 low-capacity C-zone refiner, registered FFA |
-| artery fractal dimension | deterministic branch consistency over V2 maps |
-| vein fractal dimension | V12 registered-FFA estimates averaged at thresholds 0.4/0.5/0.6 |
-
-No labels, leaderboard feedback, or per-case model selection are used at
-inference time. See [the architecture document](docs/MODEL_ARCHITECTURE.md) and
-the machine-readable [TJ009 route](configs/tj009_route.json).
+| CRAE, CRVE, AVR | caliber-oriented A/V masks and the revised Knudtson–Hubbard formulas |
+| artery density | vessel-aware artery masks with a training-only OOF calibration |
+| vein density | a compact C-zone vein refinement branch |
+| artery fractal dimension | branch-consistent artery skeleton followed by box counting |
+| vein fractal dimension | phase-aware vein geometry marginalized over three fixed thresholds |
 
 ## Repository layout
 
@@ -99,17 +78,16 @@ the machine-readable [TJ009 route](configs/tj009_route.json).
 .
 ├── README.md / README_zh-CN.md
 ├── code/
-│   ├── run_tj009_inference.sh       # end-to-end inference and packaging
-│   ├── assemble_tj009_task3.py      # exact seven-field Task 3 router
+│   ├── run_inference.sh             # end-to-end inference and packaging
+│   ├── assemble_biomarkers.py       # seven-field biomarker assembly
 │   ├── biomarker_tools/             # optic-disc and biomarker geometry
 │   ├── external/MINIMA/             # Apache-2.0 MINIMA source snapshot
 │   └── gave2_solution/              # models, training, prediction, postprocess
 ├── configs/
 │   ├── training/                    # released training configurations
-│   ├── tj009_route.json
-│   ├── v3_density_calibration.json
+│   ├── inference_route.json
+│   ├── artery_density_calibration.json
 │   └── weights_manifest.json
-├── docs/
 ├── weights/                         # intentionally empty; expected paths only
 ├── environment.yml
 └── requirements.txt
@@ -171,14 +149,14 @@ SHA256 digest is recorded in
 The external MINIMA checkpoint can also be downloaded from its
 [official release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt).
 
-## Reproduce TJ009 inference
+## Reproduce VascFusion inference
 
 Once the dataset and checkpoints are in place, run:
 
 ```bash
-bash code/run_tj009_inference.sh \
+bash code/run_inference.sh \
   --data-root /absolute/path/GAVE2_private \
-  --work-root /absolute/path/tj009_work \
+  --work-root /absolute/path/vascfusion_work \
   --output-zip /absolute/path/kawhi00.zip \
   --python "$(which python)" \
   --device cuda
@@ -190,9 +168,9 @@ The input root must contain
 
 1. independent early/late FFA-to-CFP registration with MINIMA-LoFTR;
 2. optic-disc detection and SIVA C-zone construction;
-3. V54 Task 1 and Task 2 inference;
-4. V2/V3/V12/D0044 Task 3 inference;
-5. deterministic biomarker extraction and fixed-field assembly;
+3. VascFusion-Seg inference for Task 1 and Task 2;
+4. caliber-, density-, and phase-geometry probability inference;
+5. deterministic VascFusion-Quant biomarker extraction and assembly;
 6. threshold-preserving probability compaction;
 7. submission validation and ZIP packaging.
 
@@ -206,7 +184,7 @@ Task3/g_xxx.txt  # seven biomarker values
 
 The runner refuses to overwrite an existing work directory or output ZIP. If
 you already have audited registration/disc/zone caches, see
-[`code/run_tj009_inference.sh --help`](code/run_tj009_inference.sh) for the
+[`code/run_inference.sh --help`](code/run_inference.sh) for the
 optional cache arguments.
 
 ## Training
@@ -215,10 +193,10 @@ The following commands expose both cross-validation and full-data training.
 They are the actual entry points used by the released system; paths may be
 changed, but the hyperparameters should remain fixed for exact reproduction.
 
-### 1. Train the V1 initialization checkpoints
+### 1. Train the stage-one initialization checkpoints
 
-The official TJ009 full models were warm-started from their corresponding V1
-Fold-0 checkpoints. Train Fold 0 as follows (use folds 0–4 for full CV):
+The final VascFusion-Seg models are warm-started from corresponding Fold-0
+stage-one checkpoints. Train Fold 0 as follows (use folds 0–4 for full CV):
 
 ```bash
 export DATA=/absolute/path/GAVE2_preliminary
@@ -254,42 +232,123 @@ training. Registration uses no vessel or biomarker labels.
 ### 3. Train the final Task 1 and Task 2 models
 
 ```bash
-python code/gave2_solution/train_full_variant.py \
-  --variant v54 --task 1 --data-root "$DATA" \
-  --output-dir "$RUNS/tj009/task1" \
+python code/gave2_solution/train_segmentation.py \
+  --task 1 --data-root "$DATA" \
+  --output-dir "$RUNS/vascfusion/task1" \
   --init-checkpoint "$RUNS/init/task1/fold0/best.pt" \
   --epochs 48 --size 1024x1536 --batch-size 1 \
   --accumulation-steps 2 --learning-rate 1.5e-4 \
   --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
   --warmup-epochs 2 --freeze-encoder-epochs 1 \
-  --ema-decay 0.995 --r2-steps 5 --hard-gap-weight 0.25 \
+  --ema-decay 0.995 --refinement-steps 5 --hard-gap-weight 0.25 \
   --seed 77 --device cuda --num-workers 0
 
-python code/gave2_solution/train_full_variant.py \
-  --variant v54 --task 2 --data-root "$DATA" --ffa-root "$REGISTERED" \
-  --output-dir "$RUNS/tj009/task2" \
+python code/gave2_solution/train_segmentation.py \
+  --task 2 --data-root "$DATA" --ffa-root "$REGISTERED" \
+  --output-dir "$RUNS/vascfusion/task2" \
   --init-checkpoint "$RUNS/init/task2/fold0/best.pt" \
   --epochs 37 --size 1024x1536 --batch-size 1 \
   --accumulation-steps 2 --learning-rate 1.5e-4 \
   --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
   --warmup-epochs 2 --freeze-encoder-epochs 1 \
-  --ema-decay 0.995 --r2-steps 5 --hard-gap-weight 0.25 \
+  --ema-decay 0.995 --refinement-steps 5 --hard-gap-weight 0.25 \
   --seed 77 --device cuda --num-workers 0
 ```
 
 This corresponds to 1,200 optimizer updates for Task 1 and 925 for Task 2.
 
-### 4. Train the Task 3 sources
+### 4. Prepare the optic disc and SIVA C zone
 
-Task 3 needs several globally frozen sources rather than a single checkpoint.
-The exact commands and their modality choices are documented in
-[Task 3 training](docs/TRAINING.md#task-3-source-training). In brief:
+```bash
+python code/biomarker_tools/local_optic_disc.py \
+  --data-root "$DATA" \
+  --weights weights/external/Model_DiscSeg_ORIGA.h5 \
+  --output-dir "$PWD/cache/disc_masks" --split all --device cuda
 
-- V2 and V3 use original, unregistered FFA;
-- V8 and V12 use MINIMA-registered FFA;
-- D0044 freezes V8 and trains only a low-capacity C-zone vein refiner;
-- the density calibration in `configs/v3_density_calibration.json` is fixed from
-  out-of-fold training predictions and must not be refit on test data.
+python code/gave2_solution/prepare_zone_c_masks.py \
+  --disc-dir "$PWD/cache/disc_masks/training" \
+  --output-dir "$PWD/cache/zone_c/training" \
+  --report-output "$PWD/cache/zone_c/training_report.json"
+```
+
+### 5. Train VascFusion-Quant
+
+The quantification system uses several specialized segmentation-derived
+measurement branches. All branches start from the Task 2 Fold-0 initialization:
+
+```bash
+export INIT_T2="$RUNS/init/task2/fold0/best.pt"
+```
+
+**Caliber branch — original FFA geometry:**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --data-root "$DATA" --output-dir "$RUNS/quant/caliber" \
+  --epochs 47 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0 --seed 77 --device cuda \
+  --num-workers 0 --no-pretrained --init-checkpoint "$INIT_T2"
+```
+
+**Artery-density branch — original FFA geometry:**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --data-root "$DATA" --output-dir "$RUNS/quant/artery_density" \
+  --epochs 47 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0.25 --seed 77 --device cuda \
+  --num-workers 0 --no-pretrained --init-checkpoint "$INIT_T2"
+```
+
+The released factor in `configs/artery_density_calibration.json` is estimated
+from training-only OOF predictions and remains fixed during inference.
+
+**Registered-FFA parent for vein density:**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --data-root "$DATA" --ffa-root "$REGISTERED" \
+  --output-dir "$RUNS/quant/vein_parent" \
+  --epochs 48 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0.25 --seed 77 --device cuda \
+  --num-workers 0 --no-pretrained --init-checkpoint "$INIT_T2"
+```
+
+**Phase-geometry branch for fractal dimension:**
+
+```bash
+python code/gave2_solution/train_quantification.py \
+  --task 2 --phase-geometry --data-root "$DATA" \
+  --ffa-root "$REGISTERED" --output-dir "$RUNS/quant/phase_geometry" \
+  --epochs 48 --size 1024x1536 --batch-size 1 --accumulation-steps 2 \
+  --learning-rate 1.5e-4 --encoder-lr-ratio 0.10 --weight-decay 1e-4 \
+  --warmup-epochs 2 --freeze-encoder-epochs 1 --ema-decay 0.995 \
+  --num-refinements 3 --hard-gap-weight 0.25 --seed 77 --device cuda \
+  --num-workers 0 --init-checkpoint "$INIT_T2"
+```
+
+**Compact C-zone vein refiner:**
+
+```bash
+python code/gave2_solution/train_vein_refiner.py \
+  --data-root "$DATA" --ffa-root "$REGISTERED" \
+  --zone-c-dir "$PWD/cache/zone_c/training" \
+  --parent-checkpoint "$RUNS/quant/vein_parent/final.pt" \
+  --output-dir "$RUNS/quant/vein_refiner" \
+  --size 1024x1536 --epochs 24 --accumulation-steps 2 \
+  --learning-rate 3e-4 --weight-decay 1e-4 --warmup-epochs 2 \
+  --ema-decay 0.995 --seed 77 --device cuda --num-workers 0 \
+  --loss-policy vessel_argmax
+```
+
+Only the compact C-zone refiner is optimized in the last stage; its parent
+network remains frozen.
 
 ## Evaluation and submission rules
 

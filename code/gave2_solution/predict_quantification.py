@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 from gave2v1.data import GAVE2Dataset, case_ids
 from gave2v1.engine import select_device
-from gave2v1.model_v2 import build_v2
+from gave2v1.model_core import build_retinal_vessel_net
 
 
 def _flip(
@@ -32,7 +32,10 @@ def _flip(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Write GAVE2 V2 RGB probabilities in [A, vessel, V] order."
+        description=(
+            "Write VascFusion-Quant caliber/density probabilities in "
+            "[A, vessel, V] order."
+        )
     )
     parser.add_argument("--task", type=int, choices=(1, 2), required=True)
     parser.add_argument("--checkpoint", required=True)
@@ -65,7 +68,8 @@ def main() -> None:
         action="store_true",
         help=(
             "Raise A/V probabilities with their trained centerline heads. "
-            "The vessel channel is unchanged; the default preserves V2."
+            "The vessel channel is unchanged; the default preserves the "
+            "checkpoint probabilities."
         ),
     )
     args = parser.parse_args()
@@ -80,7 +84,7 @@ def main() -> None:
     if int(config["task"]) != args.task:
         raise ValueError("Checkpoint task does not match --task")
     size = (int(config["height"]), int(config["width"]))
-    model = build_v2(
+    model = build_retinal_vessel_net(
         args.task,
         pretrained=False,
         num_refinements=int(config["num_refinements"]),

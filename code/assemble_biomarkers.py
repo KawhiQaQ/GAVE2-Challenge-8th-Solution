@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Assemble the exact fixed-field Task3 policy used by online-best TJ009.
+"""Assemble the seven VascFusion-Quant biomarker fields.
 
-The routing is global and case-independent:
+The measurement strategy is fixed for the complete dataset:
 
-* CRAE, CRVE, AVR: V2 full prediction source;
-* artery_density: V3 globally calibrated source;
-* vein_density: D0044 V17 policy specialist;
-* artery_fractal_dimension: D0040 branch-consistent V2 source;
-* vein_fractal_dimension: arithmetic mean of V12 estimates at thresholds
-  0.4, 0.5 and 0.6.
+* CRAE, CRVE, AVR: caliber-oriented probability source;
+* artery_density: globally calibrated artery-density source;
+* vein_density: compact C-zone vein-density refinement source;
+* artery_fractal_dimension: branch-consistent artery geometry;
+* vein_fractal_dimension: arithmetic mean of phase-geometry estimates at
+  thresholds 0.4, 0.5 and 0.6.
 
 No labels, per-case gates, or hidden leaderboard information are consumed.
 """
@@ -72,12 +72,12 @@ def load_per_case(path: Path) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--v2-dir", type=Path, required=True)
-    parser.add_argument("--v3-dir", type=Path, required=True)
-    parser.add_argument("--d0044-dir", type=Path, required=True)
-    parser.add_argument("--d0040-dir", type=Path, required=True)
+    parser.add_argument("--caliber-dir", type=Path, required=True)
+    parser.add_argument("--artery-density-dir", type=Path, required=True)
+    parser.add_argument("--vein-density-dir", type=Path, required=True)
+    parser.add_argument("--artery-fd-dir", type=Path, required=True)
     parser.add_argument(
-        "--v12-per-case",
+        "--vein-fd-per-case",
         type=Path,
         nargs=3,
         required=True,
@@ -88,19 +88,19 @@ def main() -> None:
     args = parser.parse_args()
 
     sources = {
-        "v2": args.v2_dir.resolve(),
-        "v3": args.v3_dir.resolve(),
-        "d0044": args.d0044_dir.resolve(),
-        "d0040": args.d0040_dir.resolve(),
+        "caliber": args.caliber_dir.resolve(),
+        "artery_density": args.artery_density_dir.resolve(),
+        "vein_density": args.vein_density_dir.resolve(),
+        "artery_fd": args.artery_fd_dir.resolve(),
     }
-    ids = task3_ids(sources["v2"])
+    ids = task3_ids(sources["caliber"])
     if not ids:
-        raise RuntimeError("V2 source contains no g_*.txt files")
+        raise RuntimeError("Caliber source contains no g_*.txt files")
     for name, path in sources.items():
         if task3_ids(path) != ids:
-            raise ValueError(f"{name} cases do not match V2 cases")
+            raise ValueError(f"{name} cases do not match caliber cases")
 
-    persistence_paths = [path.resolve() for path in args.v12_per_case]
+    persistence_paths = [path.resolve() for path in args.vein_fd_per_case]
     persistence = [load_per_case(path) for path in persistence_paths]
     for path, payload in zip(persistence_paths, persistence):
         if sorted(payload) != ids:
@@ -113,24 +113,28 @@ def main() -> None:
 
     cases: dict[str, Any] = {}
     for case_id in ids:
-        v2 = parse_task3(sources["v2"] / f"{case_id}.txt")
-        v3 = parse_task3(sources["v3"] / f"{case_id}.txt")
-        d0044 = parse_task3(sources["d0044"] / f"{case_id}.txt")
-        d0040 = parse_task3(sources["d0040"] / f"{case_id}.txt")
+        caliber = parse_task3(sources["caliber"] / f"{case_id}.txt")
+        artery_density = parse_task3(
+            sources["artery_density"] / f"{case_id}.txt"
+        )
+        vein_density = parse_task3(
+            sources["vein_density"] / f"{case_id}.txt"
+        )
+        artery_fd = parse_task3(sources["artery_fd"] / f"{case_id}.txt")
         vein_fd_values = [
             float(payload[case_id]["prediction"]["vein_fractal_dimension"])
             for payload in persistence
         ]
         if not all(math.isfinite(value) for value in vein_fd_values):
-            raise ValueError(f"{case_id}: non-finite V12 vein FD")
+            raise ValueError(f"{case_id}: non-finite vein FD")
 
         output = {
-            "CRAE": v2["CRAE"],
-            "CRVE": v2["CRVE"],
-            "AVR": v2["AVR"],
-            "artery_density": v3["artery_density"],
-            "vein_density": d0044["vein_density"],
-            "artery_fractal_dimension": d0040[
+            "CRAE": caliber["CRAE"],
+            "CRVE": caliber["CRVE"],
+            "AVR": caliber["AVR"],
+            "artery_density": artery_density["artery_density"],
+            "vein_density": vein_density["vein_density"],
+            "artery_fractal_dimension": artery_fd[
                 "artery_fractal_dimension"
             ],
             "vein_fractal_dimension": sum(vein_fd_values) / 3.0,
@@ -144,29 +148,31 @@ def main() -> None:
         )
         cases[case_id] = {
             "sha256": sha256(destination),
-            "v12_vein_fd_threshold_values": vein_fd_values,
+            "vein_fd_threshold_values": vein_fd_values,
         }
 
     report = {
         "schema_version": 1,
-        "candidate": "TJ009-online-best",
+        "method": "VascFusion-Quant",
         "case_count": len(ids),
         "case_ids": ids,
-        "fixed_field_route": {
-            "CRAE": "V2 raw-FFA full source",
-            "CRVE": "V2 raw-FFA full source",
-            "AVR": "V2 raw-FFA full source",
-            "artery_density": "V3 calibrated raw-FFA full source",
-            "vein_density": "D0044 registered-FFA policy specialist",
+        "measurement_route": {
+            "CRAE": "caliber expert with original FFA geometry",
+            "CRVE": "caliber expert with original FFA geometry",
+            "AVR": "caliber expert with original FFA geometry",
+            "artery_density": "globally calibrated artery-density expert",
+            "vein_density": "registered-FFA C-zone vein refiner",
             "artery_fractal_dimension": (
-                "D0040 deterministic branch consistency over V2 raw maps"
+                "deterministic branch consistency over caliber probabilities"
             ),
             "vein_fractal_dimension": (
-                "V12 registered-FFA scalar mean at thresholds 0.4/0.5/0.6"
+                "phase-geometry scalar mean at thresholds 0.4/0.5/0.6"
             ),
         },
         "source_directories": {key: str(value) for key, value in sources.items()},
-        "v12_per_case_reports": [str(path) for path in persistence_paths],
+        "vein_fd_per_case_reports": [
+            str(path) for path in persistence_paths
+        ],
         "per_case_selection": False,
         "labels_used": False,
         "cases": cases,

@@ -7,13 +7,54 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 
 from .model import DetailStem, ResidualDSBlock, _groups
-from .model_v2 import DilatedResidualBlock, GAVEV2, warm_start_v2
-from .model_v28 import NativeFinalAVRefiner
-from .model_v30 import warm_start_v30
+from .model_core import (
+    DilatedResidualBlock,
+    RetinalVesselNet,
+    warm_start_retinal_vessel_net,
+)
 
 
-class R2SharedProbabilityUNet(nn.Module):
-    """Deep shared U-Net that recursively classifies a fixed vessel tree."""
+class NativeFinalAVRefiner(nn.Module):
+    """Lightweight native-resolution correction after recursive refinement."""
+
+    def __init__(self, decoder_channels: int = 64) -> None:
+        super().__init__()
+        self.context = nn.Sequential(
+            nn.Conv2d(decoder_channels, 8, 1, bias=False),
+            nn.GroupNorm(4, 8),
+            nn.GELU(),
+        )
+        self.fuse = nn.Sequential(
+            nn.Conv2d(8 + 2 + 1 + 2, 16, 3, padding=1, bias=False),
+            nn.GroupNorm(4, 16),
+            nn.GELU(),
+            ResidualDSBlock(16, 16),
+        )
+        self.output = nn.Conv2d(16, 2, 1)
+        nn.init.zeros_(self.output.weight)
+        nn.init.zeros_(self.output.bias)
+
+    def forward(
+        self,
+        decoded_full: Tensor,
+        av_logits: Tensor,
+        vessel_probability: Tensor,
+        centerline_probability: Tensor,
+    ) -> Tensor:
+        evidence = torch.cat(
+            (
+                self.context(decoded_full),
+                av_logits.sigmoid().detach(),
+                vessel_probability.detach(),
+                centerline_probability.detach(),
+            ),
+            dim=1,
+        )
+        return av_logits + self.output(self.fuse(evidence))
+
+
+class TopologyRefinementUNet(nn.Module):
+    """Shared U-Net that recursively refines A/V probabilities on a vessel tree."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -95,10 +136,10 @@ class R2SharedProbabilityUNet(nn.Module):
         return self.output(self.up_full(torch.cat((feature, full), dim=1)))
 
 
-class GAVEV54(GAVEV2):
-    """Task-specific best geometry plus a deep R2 probability-only U-Net."""
+class VascFusionSeg(RetinalVesselNet):
+    """Modality-adaptive segmentation with recursive topology refinement."""
 
-    architecture_name = "GAVEV54-DeepR2SharedProbabilityUNet"
+    architecture_name = "VascFusion-Seg"
     rgb_mean = (0.485, 0.456, 0.406)
     rgb_std = (0.229, 0.224, 0.225)
 
@@ -128,10 +169,10 @@ class GAVEV54(GAVEV2):
         # Replace, rather than stack on, the old context refiner.
         self.refinement_context = nn.Identity()
         self.topology_refiner = nn.Identity()
-        self.r2_specialist = R2SharedProbabilityUNet()
-        self._initialize_v54_layers()
+        self.r2_specialist = TopologyRefinementUNet()
+        self._initialize_vascfusion_layers()
 
-    def _initialize_v54_layers(self) -> None:
+    def _initialize_vascfusion_layers(self) -> None:
         modules: list[nn.Module] = [self.r2_specialist]
         if self.task == 1:
             modules.extend((self.detail, self.native_final_refiner))
@@ -183,7 +224,7 @@ class GAVEV54(GAVEV2):
         if self.task == 2:
             return super()._build_detail_input(rgb, ffa)
         if ffa is not None:
-            raise ValueError("V54 Task1 is strictly CFP-only")
+            raise ValueError("VascFusion-Seg Task 1 is strictly CFP-only")
         red = (
             rgb[:, 0:1] * self.rgb_std[0] + self.rgb_mean[0]
         ).clamp(0.0, 1.0)
@@ -270,24 +311,59 @@ class GAVEV54(GAVEV2):
         )
 
 
-def build_v54(
+def build_vascfusion(
     *,
     task: int,
     pretrained: bool = True,
     r2_steps: int = 5,
-) -> GAVEV54:
-    return GAVEV54(
+) -> VascFusionSeg:
+    return VascFusionSeg(
         task=task,
         pretrained=pretrained,
         r2_steps=r2_steps,
     )
 
 
-def warm_start_v54(
-    model: GAVEV54,
+def warm_start_vascfusion(
+    model: VascFusionSeg,
     checkpoint_path: str | Path,
 ) -> dict[str, int]:
     if model.task == 1:
-        return warm_start_v30(model, checkpoint_path)
-    return warm_start_v2(model, checkpoint_path)
-
+        checkpoint = torch.load(
+            Path(checkpoint_path),
+            map_location="cpu",
+            weights_only=False,
+        )
+        source = checkpoint["model"]
+        target = model.state_dict()
+        source_detail_channels = 3
+        target_detail_channels = 5
+        matched: dict[str, Tensor] = {}
+        expanded = 0
+        for name, value in source.items():
+            if name not in target:
+                continue
+            if target[name].shape == value.shape:
+                matched[name] = value
+                continue
+            if (
+                value.ndim == 4
+                and target[name].ndim == 4
+                and value.shape[0] == target[name].shape[0]
+                and value.shape[2:] == target[name].shape[2:]
+                and value.shape[1] == source_detail_channels
+                and target[name].shape[1] == target_detail_channels
+            ):
+                initialized = target[name].clone()
+                initialized[:, :source_detail_channels].copy_(value)
+                initialized[:, source_detail_channels:].zero_()
+                matched[name] = initialized
+                expanded += 1
+        missing, unexpected = model.load_state_dict(matched, strict=False)
+        return {
+            "loaded_tensors": len(matched),
+            "expanded_physiology_detail_tensors": expanded,
+            "missing_tensors": len(missing),
+            "unexpected_tensors": len(unexpected),
+        }
+    return warm_start_retinal_vessel_net(model, checkpoint_path)

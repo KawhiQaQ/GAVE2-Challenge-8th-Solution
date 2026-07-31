@@ -9,7 +9,7 @@ from torch import Tensor, nn
 import torch.nn.functional as F
 
 from .model import ResidualDSBlock, _groups
-from .model_v2 import GAVEV2, build_v2
+from .model_core import RetinalVesselNet, build_retinal_vessel_net
 
 
 class VeinGeometryRefiner(nn.Module):
@@ -101,19 +101,19 @@ class VeinGeometryRefiner(nn.Module):
         return self.output(feature)
 
 
-class GAVEV17Task3(nn.Module):
-    """Frozen V8 Task2 plus a dedicated C-zone vein geometry head.
+class VeinDensityRefinementNet(nn.Module):
+    """Frozen multimodal parent plus a dedicated C-zone vein geometry head.
 
     The parent is immutable and remains the Task2 submission model. The new
     head changes only the Task3 vein source inside the SIVA C zone.
     """
 
-    architecture_name = "GAVEV17-FrozenV8-CZoneVeinGeometry"
+    architecture_name = "VascFusion-CZoneVeinRefinement"
 
-    def __init__(self, parent: GAVEV2) -> None:
+    def __init__(self, parent: RetinalVesselNet) -> None:
         super().__init__()
         if parent.task != 2:
-            raise ValueError("V17 requires a Task2 V8 parent")
+            raise ValueError("Vein refinement requires a Task 2 parent")
         self.parent = parent
         for parameter in self.parent.parameters():
             parameter.requires_grad_(False)
@@ -142,9 +142,9 @@ class GAVEV17Task3(nn.Module):
         apply_refiner: bool = True,
     ) -> dict[str, Tensor]:
         if ffa is None:
-            raise ValueError("V17 requires registered FFA")
+            raise ValueError("Vein refinement requires registered FFA")
         if region.ndim != 4 or region.shape[1] != 1:
-            raise ValueError("V17 region must have shape [B, 1, H, W]")
+            raise ValueError("C-zone region must have shape [B, 1, H, W]")
         parent_probabilities = self.parent_probabilities(rgb, ffa)
         parent_vein = parent_probabilities[:, 2:3].clamp(
             1e-4,
@@ -186,9 +186,9 @@ class GAVEV17Task3(nn.Module):
         return self.refiner.state_dict()
 
 
-def load_v8_parent(
+def load_vein_parent(
     checkpoint_path: str | Path,
-) -> tuple[GAVEV2, dict[str, Any]]:
+) -> tuple[RetinalVesselNet, dict[str, Any]]:
     path = Path(checkpoint_path).resolve()
     checkpoint = torch.load(
         path,
@@ -197,8 +197,8 @@ def load_v8_parent(
     )
     config = checkpoint["config"]
     if int(config["task"]) != 2:
-        raise ValueError("V17 parent checkpoint must be Task2")
-    parent = build_v2(
+        raise ValueError("Vein-density parent checkpoint must be Task 2")
+    parent = build_retinal_vessel_net(
         task=2,
         pretrained=False,
         num_refinements=int(config["num_refinements"]),
@@ -209,7 +209,8 @@ def load_v8_parent(
     )
     if missing or unexpected:
         raise ValueError(
-            f"V8 parent load failed: missing={missing}, unexpected={unexpected}"
+            "Vein-density parent load failed: "
+            f"missing={missing}, unexpected={unexpected}"
         )
     report = {
         "checkpoint": str(path),
@@ -225,8 +226,8 @@ def load_v8_parent(
     return parent, report
 
 
-def load_compact_v17_state(
-    model: GAVEV17Task3,
+def load_compact_refiner_state(
+    model: VeinDensityRefinementNet,
     state: Mapping[str, Tensor],
 ) -> dict[str, int]:
     missing, unexpected = model.refiner.load_state_dict(
@@ -235,7 +236,8 @@ def load_compact_v17_state(
     )
     if missing or unexpected:
         raise ValueError(
-            f"V17 refiner load failed: missing={missing}, unexpected={unexpected}"
+            "Vein refiner load failed: "
+            f"missing={missing}, unexpected={unexpected}"
         )
     return {
         "loaded_tensors": len(state),

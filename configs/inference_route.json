@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "method": "VascFusion",
+  "status": "best_preliminary_submission",
+  "online_scores": {
+    "overall": 7.94362,
+    "task1": 8.2966,
+    "task2": 8.31706,
+    "task3": 7.3937
+  },
+  "task1": {
+    "model": "VascFusion-Seg (CFP)",
+    "checkpoint": "../weights/task1/segmentation_cfp.pt",
+    "checkpoint_sha256": "34be0983ace35d0fbf1c3760bf7142c56ed2b8e70d375d7efd2d0e872e3264ad",
+    "inputs": [
+      "CFP"
+    ],
+    "postprocess": {
+      "script": "../code/gave2_solution/postprocess_av.py",
+      "radius": 3
+    }
+  },
+  "task2": {
+    "model": "VascFusion-Seg (CFP + FFA)",
+    "checkpoint": "../weights/task2/segmentation_multimodal.pt",
+    "checkpoint_sha256": "26b62c1e98c4f88f485bc3cacdbd9c5be25aab895c59135d8c94811cd3e0afcc",
+    "inputs": [
+      "CFP",
+      "MINIMA-registered FFA_A",
+      "MINIMA-registered FFA_AV"
+    ],
+    "postprocess": {
+      "script": "../code/gave2_solution/postprocess_av.py",
+      "radius": 3
+    }
+  },
+  "task3": {
+    "model": "VascFusion-Quant",
+    "fields": {
+      "CRAE": {
+        "strategy": "caliber expert with original FFA geometry",
+        "checkpoint": "../weights/task3/caliber_expert.pt"
+      },
+      "CRVE": {
+        "strategy": "caliber expert with original FFA geometry",
+        "checkpoint": "../weights/task3/caliber_expert.pt"
+      },
+      "AVR": {
+        "strategy": "caliber expert with original FFA geometry",
+        "checkpoint": "../weights/task3/caliber_expert.pt"
+      },
+      "artery_density": {
+        "strategy": "artery-density expert with training-only OOF calibration",
+        "checkpoint": "../weights/task3/artery_density_expert.pt",
+        "calibration": "artery_density_calibration.json"
+      },
+      "vein_density": {
+        "strategy": "registered-FFA C-zone vein refinement",
+        "parent_checkpoint": "../weights/task3/vein_density_parent.pt",
+        "refiner_checkpoint": "../weights/task3/vein_density_refiner.pt"
+      },
+      "artery_fractal_dimension": {
+        "strategy": "branch-consistent artery skeleton and box counting",
+        "checkpoint": "../weights/task3/caliber_expert.pt",
+        "postprocess": "../code/gave2_solution/postprocess_branch_consistency.py"
+      },
+      "vein_fractal_dimension": {
+        "strategy": "mean phase geometry at thresholds 0.4, 0.5, and 0.6",
+        "checkpoint": "../weights/task3/phase_geometry_expert.pt"
+      }
+    },
+    "assembler": "../code/assemble_biomarkers.py"
+  },
+  "submission": {
+    "probability_channel_order": [
+      "artery",
+      "all_vessel",
+      "vein"
+    ],
+    "compaction_step": 4,
+    "compaction_preserves_threshold_0_5": true,
+    "archive_distributed": false
+  }
+}

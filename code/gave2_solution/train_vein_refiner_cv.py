@@ -19,11 +19,14 @@ from torch.utils.data import DataLoader
 
 from gave2v1.data import GAVE2Dataset, make_balanced_folds
 from gave2v1.engine import WarmupCosine, move_batch, seed_everything, select_device
-from gave2v1.model_v17 import GAVEV17Task3, load_v8_parent
+from gave2v1.model_vein_refinement import (
+    VeinDensityRefinementNet,
+    load_vein_parent,
+)
 
 
 @dataclass
-class V17Config:
+class VeinRefinerConfig:
     fold: int
     n_folds: int
     seed: int
@@ -154,7 +157,7 @@ def _cldice(
 
 @torch.inference_mode()
 def evaluate(
-    model: GAVEV17Task3,
+    model: VeinDensityRefinementNet,
     refiner: nn.Module,
     loader: DataLoader,
     device: torch.device,
@@ -255,7 +258,7 @@ def update_ema(
 def save_checkpoint(
     path: Path,
     refiner: nn.Module,
-    config: V17Config,
+    config: VeinRefinerConfig,
     split: dict[str, list[str]],
     parent_report: dict[str, Any],
     epoch: int,
@@ -270,7 +273,7 @@ def save_checkpoint(
             "parent": parent_report,
             "epoch": epoch,
             "metrics": metrics,
-            "architecture": GAVEV17Task3.architecture_name,
+            "architecture": VeinDensityRefinementNet.architecture_name,
         },
         path,
     )
@@ -278,7 +281,7 @@ def save_checkpoint(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Train V17 Task3 C-zone vein geometry refiner."
+        description="Train the VascFusion-Quant C-zone vein refiner."
     )
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--ffa-root", required=True)
@@ -334,8 +337,8 @@ def main() -> None:
 
     seed_everything(args.seed + args.fold)
     device = select_device(args.device)
-    parent, parent_report = load_v8_parent(parent_checkpoint)
-    model = GAVEV17Task3(parent).to(device)
+    parent, parent_report = load_vein_parent(parent_checkpoint)
+    model = VeinDensityRefinementNet(parent).to(device)
     height, width = args.size
     train_dataset = GAVE2Dataset(
         data_root,
@@ -372,7 +375,7 @@ def main() -> None:
         num_workers=args.num_workers,
         pin_memory=device.type == "cuda",
     )
-    config = V17Config(
+    config = VeinRefinerConfig(
         fold=args.fold,
         n_folds=args.n_folds,
         seed=args.seed,

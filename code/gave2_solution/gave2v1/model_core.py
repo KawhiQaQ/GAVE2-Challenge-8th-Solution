@@ -114,10 +114,10 @@ class RecurrentTopologyRefiner(nn.Module):
         return self.output(self.up_full(torch.cat((feature, full), dim=1)))
 
 
-class GAVEV2(nn.Module):
+class RetinalVesselNet(nn.Module):
     """Native-resolution recurrent structured A/V segmentation network."""
 
-    architecture_name = "GAVEV2-ConvNeXtTiny-RecurrentTopology"
+    architecture_name = "VascFusion-RetinalVesselCore"
 
     def __init__(
         self,
@@ -157,7 +157,7 @@ class GAVEV2(nn.Module):
             ResidualDSBlock(72, 64),
         )
 
-        # V1-compatible heads make warm-starting lossless at iteration zero.
+        # Stage-one-compatible heads make warm-starting lossless at iteration zero.
         self.semantic_head = nn.Conv2d(64, 4, 1)
         self.vessel_head = nn.Conv2d(64, 1, 1)
         self.centerline_head = nn.Conv2d(64, 3, 1)
@@ -215,7 +215,7 @@ class GAVEV2(nn.Module):
         self.semantic_head.bias.data.copy_(semantic_bias)
         self.aux_semantic_head.bias.data.copy_(semantic_bias)
 
-        # V2 initially reproduces the V1 semantic marginals exactly.
+        # The recursive head initially preserves the semantic marginals.
         nn.init.zeros_(self.av_residual_head.weight)
         nn.init.zeros_(self.av_residual_head.bias)
         nn.init.zeros_(self.topology_refiner.output.weight)
@@ -326,7 +326,7 @@ class GAVEV2(nn.Module):
     ) -> list[Tensor]:
         """Run the architecture's shared A/V recurrence.
 
-        This hook keeps the historical V2 computation unchanged while allowing
+        This hook preserves the core computation while allowing
         later models to replace the recurrent core without copying the complete
         encoder/decoder forward.
         """
@@ -527,20 +527,20 @@ class GAVEV2(nn.Module):
         return encoder_parameters, new_parameters
 
 
-def build_v2(
+def build_retinal_vessel_net(
     task: int,
     pretrained: bool = True,
     num_refinements: int = 3,
-) -> GAVEV2:
-    return GAVEV2(
+) -> RetinalVesselNet:
+    return RetinalVesselNet(
         task=task,
         pretrained=pretrained,
         num_refinements=num_refinements,
     )
 
 
-def warm_start_v2(
-    model: GAVEV2,
+def warm_start_retinal_vessel_net(
+    model: RetinalVesselNet,
     checkpoint_path: str | Path,
 ) -> dict[str, int]:
     checkpoint = torch.load(

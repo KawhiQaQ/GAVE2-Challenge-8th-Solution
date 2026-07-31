@@ -84,11 +84,11 @@ def hard_centerline_gap_loss(
 
 
 @dataclass(frozen=True)
-class V2LossWeights:
+class TopologyLossWeights:
     recurrent_av: float = 1.0
     vessel: float = 0.9
     topology: float = 0.70
-    # Disabled in the V2 recipe evaluated on fold0. A non-zero value is
+    # A non-zero value enables the weakest-centerline gap objective.
     # reserved for a separately validated later version.
     hard_gap: float = 0.0
     centerline: float = 0.25
@@ -97,10 +97,10 @@ class V2LossWeights:
     hierarchy: float = 0.10
 
 
-class GAVEV2Loss(nn.Module):
+class TopologyAwareLoss(nn.Module):
     def __init__(
         self,
-        weights: V2LossWeights = V2LossWeights(),
+        weights: TopologyLossWeights = TopologyLossWeights(),
         class_weights: tuple[float, float, float, float] = (
             0.20,
             1.0,

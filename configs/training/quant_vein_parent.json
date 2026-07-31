@@ -5,7 +5,7 @@
   "seed": 77,
   "height": 1024,
   "width": 1536,
-  "epochs": 47,
+  "epochs": 48,
   "patience": 0,
   "batch_size": 1,
   "accumulation_steps": 2,
@@ -17,9 +17,12 @@
   "ema_decay": 0.995,
   "device": "cuda",
   "data_root": "<DATA_ROOT>",
-  "output_dir": "<RUN_ROOT>/task3/v2",
+  "output_dir": "<RUN_ROOT>/quant/vein_parent",
   "pretrained": false,
   "num_refinements": 3,
+  "hard_gap_weight": 0.25,
+  "ffa_root": "<REGISTERED_FFA_ROOT>",
   "full_training": true,
-  "v2_recipe": true
+  "probability_refinement_recipe": false,
+  "hard_gap_recipe": true
 }

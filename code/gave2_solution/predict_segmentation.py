@@ -12,12 +12,12 @@ import torch.nn.functional as F
 
 from gave2v1.data import GAVE2Dataset, case_ids
 from gave2v1.engine import select_device
-from gave2v1.model_v54 import build_v54
+from gave2v1.model_vascfusion import build_vascfusion
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Write V54 probabilities in [A, vessel, V]."
+        description="Write VascFusion-Seg probabilities in [A, vessel, V]."
     )
     parser.add_argument("--task", type=int, choices=(1, 2), required=True)
     parser.add_argument("--checkpoint", required=True)
@@ -42,7 +42,7 @@ def main() -> None:
     config = checkpoint["config"]
     if int(config["task"]) != args.task:
         raise ValueError("checkpoint task does not match --task")
-    model = build_v54(
+    model = build_vascfusion(
         task=args.task,
         pretrained=False,
         r2_steps=int(config["r2_steps"]),
@@ -135,4 +135,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
