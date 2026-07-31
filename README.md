@@ -395,6 +395,6 @@ useful, please also cite the GAVE2 challenge and the upstream methods listed in
 
 ## License
 
-The repository is private during the competition. A license for our original
-code will be added before public release; bundled third-party code remains
-under its original license.
+Our original code is released under the [MIT License](LICENSE). Third-party
+components remain subject to their respective licenses, as documented in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

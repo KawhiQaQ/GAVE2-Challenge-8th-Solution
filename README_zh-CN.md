@@ -371,5 +371,5 @@ Task 3 的 `local_biomarker_eval.py` 会在有标签训练折上报告原始 MAE
 
 ## 许可证
 
-比赛期间仓库保持私有。公开前将为原创代码补充许可证；第三方代码继续遵循其
-原始许可证。
+本仓库原创代码采用 [MIT License](LICENSE)。第三方组件继续遵循各自的许可证，
+详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
