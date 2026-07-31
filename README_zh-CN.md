@@ -1,6 +1,6 @@
 <div align="center">
 
-# VascFusion——MICCAI 2026 GAVE2 Challenge 第 8 名方案
+# VascFusion：MICCAI 2026 GAVE2 Challenge 第 8 名方案
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 

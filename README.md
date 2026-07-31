@@ -1,6 +1,6 @@
 <div align="center">
 
-# VascFusion — 8th-Place Solution for the MICCAI 2026 GAVE2 Challenge
+# VascFusion: 8th-Place Solution for the MICCAI 2026 GAVE2 Challenge
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
