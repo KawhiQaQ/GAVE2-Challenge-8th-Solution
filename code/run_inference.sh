@@ -120,7 +120,7 @@ print(indices[0], len(indices))
 PY
 )
 
-export PYTHONPATH="${SOLUTION}"
+export PYTHONPATH="${SOLUTION}${PYTHONPATH:+:${PYTHONPATH}}"
 export TORCH_HOME="${WORK_ROOT}/torch_cache"
 
 if [[ -z "${REGISTERED_FFA_ROOT}" ]]; then
