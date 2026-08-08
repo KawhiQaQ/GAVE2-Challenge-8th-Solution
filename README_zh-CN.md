@@ -1,19 +1,19 @@
 <div align="center">
 
-# VascFusion：MICCAI 2026 GAVE2 Challenge 第 8 名方案
+# VascFusion：MICCAI 2026 GAVE2 Challenge 预赛第 8 名方案
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
 </div>
 
 本仓库包含 **VascFusion** 的训练与推理代码。VascFusion 是我们参加 MICCAI
-2026 GAVE2 Challenge 的第 8 名方案，覆盖三个任务：
+2026 GAVE2 Challenge 的预赛第 8 名方案，覆盖三个任务：
 
 1. 仅使用 CFP 的视网膜动静脉分割；
 2. CFP + FFA 跨模态动静脉分割；
 3. CRAE、CRVE、AVR、动静脉密度和动静脉分形维数测量。
 
-## 比赛结果
+## 预赛结果
 
 | 方法 | Task 1 | Task 2 | Task 3 | 总分 |
 |---|---:|---:|---:|---:|
@@ -177,10 +177,10 @@ Task3/g_xxx.txt  # 七项生物标志物
 ## Docker
 
 固定版本的 CUDA 镜像发布在
-[Docker Hub](https://hub.docker.com/r/kawhiqaq/vascfusion-gave2)：
+[Docker Hub](https://hub.docker.com/r/kawhi00/vascfusion-gave2)：
 
 ```bash
-docker pull kawhiqaq/vascfusion-gave2:1.0.0
+docker pull kawhi00/vascfusion-gave2:1.0.0
 ```
 
 镜像包含源码以及固定的 PyTorch 2.4/CUDA 12.1 运行环境，但不包含比赛数据和
@@ -192,7 +192,7 @@ docker pull kawhiqaq/vascfusion-gave2:1.0.0
 docker run --rm --gpus all \
   -v /absolute/path/weights:/opt/vascfusion/weights:ro \
   -v /absolute/path/GAVE2_private:/data:ro \
-  kawhiqaq/vascfusion-gave2:1.0.0 \
+  kawhi00/vascfusion-gave2:1.0.0 \
   verify --require-cuda --require-weights --data-root /data
 ```
 
@@ -205,7 +205,7 @@ docker run --rm --gpus all \
   -v /absolute/path/weights:/opt/vascfusion/weights:ro \
   -v /absolute/path/GAVE2_private:/data:ro \
   -v /absolute/path/vascfusion_output:/output \
-  kawhiqaq/vascfusion-gave2:1.0.0 \
+  kawhi00/vascfusion-gave2:1.0.0 \
   inference --data-root /data \
             --work-root /output/work \
             --output-zip /output/vascfusion.zip \

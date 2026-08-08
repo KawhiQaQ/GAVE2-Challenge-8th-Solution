@@ -1,6 +1,6 @@
 <div align="center">
 
-# VascFusion: 8th-Place Solution for the MICCAI 2026 GAVE2 Challenge
+# VascFusion: 8th-Place Preliminary-Round Solution for the MICCAI 2026 GAVE2 Challenge
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
@@ -11,14 +11,14 @@
 </div>
 
 This repository contains the training and inference code for **VascFusion**,
-our 8th-place solution to the MICCAI 2026 GAVE2 Challenge.
+our 8th-place preliminary-round solution to the MICCAI 2026 GAVE2 Challenge.
 VascFusion covers all three tasks:
 
 1. CFP-only retinal artery/vein segmentation;
 2. CFP + FFA cross-modal artery/vein segmentation;
 3. CRAE, CRVE, AVR, artery/vein density, and artery/vein fractal dimension.
 
-## Results
+## Preliminary Results
 
 | Method | Task 1 | Task 2 | Task 3 | Overall |
 |---|---:|---:|---:|---:|
@@ -197,10 +197,10 @@ optional cache arguments.
 ## Docker
 
 A versioned CUDA image is published on
-[Docker Hub](https://hub.docker.com/r/kawhiqaq/vascfusion-gave2):
+[Docker Hub](https://hub.docker.com/r/kawhi00/vascfusion-gave2):
 
 ```bash
-docker pull kawhiqaq/vascfusion-gave2:1.0.0
+docker pull kawhi00/vascfusion-gave2:1.0.0
 ```
 
 The image contains the source code and a pinned PyTorch 2.4/CUDA 12.1 runtime,
@@ -214,7 +214,7 @@ checkpoint digest:
 docker run --rm --gpus all \
   -v /absolute/path/weights:/opt/vascfusion/weights:ro \
   -v /absolute/path/GAVE2_private:/data:ro \
-  kawhiqaq/vascfusion-gave2:1.0.0 \
+  kawhi00/vascfusion-gave2:1.0.0 \
   verify --require-cuda --require-weights --data-root /data
 ```
 
@@ -227,7 +227,7 @@ docker run --rm --gpus all \
   -v /absolute/path/weights:/opt/vascfusion/weights:ro \
   -v /absolute/path/GAVE2_private:/data:ro \
   -v /absolute/path/vascfusion_output:/output \
-  kawhiqaq/vascfusion-gave2:1.0.0 \
+  kawhi00/vascfusion-gave2:1.0.0 \
   inference --data-root /data \
             --work-root /output/work \
             --output-zip /output/vascfusion.zip \
