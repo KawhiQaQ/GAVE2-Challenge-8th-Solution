@@ -38,9 +38,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          load: true
-          push: false
-          tags: vascfusion:ci
+          push: true
+          tags: ttl.sh/7f234f37-8a38-4e31-8f73-4cefb68ae2b0:24h
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -48,4 +47,4 @@ jobs:
             BUILD_DATE=${{ github.event.repository.updated_at }}
 
       - name: Verify packaged runtime
-        run: docker run --rm vascfusion:ci verify
+        run: docker run --rm ttl.sh/7f234f37-8a38-4e31-8f73-4cefb68ae2b0:24h verify
