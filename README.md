@@ -194,6 +194,50 @@ you already have audited registration/disc/zone caches, see
 [`code/run_inference.sh --help`](code/run_inference.sh) for the
 optional cache arguments.
 
+## Docker
+
+A versioned CUDA image is published on
+[Docker Hub](https://hub.docker.com/r/kawhiqaq/vascfusion-gave2):
+
+```bash
+docker pull kawhiqaq/vascfusion-gave2:1.0.0
+```
+
+The image contains the source code and a pinned PyTorch 2.4/CUDA 12.1 runtime,
+but intentionally excludes challenge data and checkpoints. Prepare the
+semantic checkpoint paths described in [Checkpoints](#checkpoints), then mount
+the complete `weights/` directory at `/opt/vascfusion/weights`. Before
+inference, validate CUDA access, the dataset layout, and every inference
+checkpoint digest:
+
+```bash
+docker run --rm --gpus all \
+  -v /absolute/path/weights:/opt/vascfusion/weights:ro \
+  -v /absolute/path/GAVE2_private:/data:ro \
+  kawhiqaq/vascfusion-gave2:1.0.0 \
+  verify --require-cuda --require-weights --data-root /data
+```
+
+Run the complete three-task pipeline with a new, empty output directory:
+
+```bash
+mkdir -p /absolute/path/vascfusion_output
+
+docker run --rm --gpus all \
+  -v /absolute/path/weights:/opt/vascfusion/weights:ro \
+  -v /absolute/path/GAVE2_private:/data:ro \
+  -v /absolute/path/vascfusion_output:/output \
+  kawhiqaq/vascfusion-gave2:1.0.0 \
+  inference --data-root /data \
+            --work-root /output/work \
+            --output-zip /output/vascfusion.zip \
+            --device cuda
+```
+
+The host must have an NVIDIA driver and the NVIDIA Container Toolkit. To rerun,
+use a fresh output directory because the inference runner deliberately refuses
+to overwrite prior artifacts.
+
 ## Training
 
 The following commands expose both cross-validation and full-data training.

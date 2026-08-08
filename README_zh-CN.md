@@ -174,6 +174,47 @@ Task3/g_xxx.txt  # 七项生物标志物
 脚本不会覆盖已有工作目录或 ZIP。如果已有经过核验的配准、视盘或 C 区缓存，
 可通过 `bash code/run_inference.sh --help` 查看可选缓存参数。
 
+## Docker
+
+固定版本的 CUDA 镜像发布在
+[Docker Hub](https://hub.docker.com/r/kawhiqaq/vascfusion-gave2)：
+
+```bash
+docker pull kawhiqaq/vascfusion-gave2:1.0.0
+```
+
+镜像包含源码以及固定的 PyTorch 2.4/CUDA 12.1 运行环境，但不包含比赛数据和
+模型权重。请先按[权重](#权重)小节创建语义化权重路径，再把完整 `weights/`
+目录挂载到 `/opt/vascfusion/weights`。正式推理前，先校验 CUDA、数据目录结构
+以及所有推理权重的 SHA256：
+
+```bash
+docker run --rm --gpus all \
+  -v /absolute/path/weights:/opt/vascfusion/weights:ro \
+  -v /absolute/path/GAVE2_private:/data:ro \
+  kawhiqaq/vascfusion-gave2:1.0.0 \
+  verify --require-cuda --require-weights --data-root /data
+```
+
+使用一个全新的空输出目录运行三个任务的完整流程：
+
+```bash
+mkdir -p /absolute/path/vascfusion_output
+
+docker run --rm --gpus all \
+  -v /absolute/path/weights:/opt/vascfusion/weights:ro \
+  -v /absolute/path/GAVE2_private:/data:ro \
+  -v /absolute/path/vascfusion_output:/output \
+  kawhiqaq/vascfusion-gave2:1.0.0 \
+  inference --data-root /data \
+            --work-root /output/work \
+            --output-zip /output/vascfusion.zip \
+            --device cuda
+```
+
+宿主机需要安装 NVIDIA 驱动和 NVIDIA Container Toolkit。若要重新运行，请换用
+新的输出目录，因为推理脚本会拒绝覆盖已有产物。
+
 ## 从头训练
 
 以下命令同时支持交叉验证与全数据训练，均对应仓库内真实入口。若希望精确复现，
