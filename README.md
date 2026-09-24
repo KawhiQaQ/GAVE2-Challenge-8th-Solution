@@ -153,8 +153,9 @@ in [weights/README.md](weights/README.md).
 Two third-party weights are not included in the Netdisk directory. Download
 MINIMA-LoFTR from its
 [official release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt)
-to `weights/external/minima_loftr.ckpt`, and place the MNet/DeepCDR optic-disc
-checkpoint at `weights/external/Model_DiscSeg_ORIGA.h5`.
+to `weights/external/minima_loftr.ckpt`; download the MNet/DeepCDR optic-disc
+checkpoint from [HzFu/MNet_DeepCDR](https://github.com/HzFu/MNet_DeepCDR/blob/master/mnet_deep_cdr/deep_model/Model_DiscSeg_ORIGA.h5)
+and place it at `weights/external/Model_DiscSeg_ORIGA.h5`.
 
 ## Reproduce VascFusion inference
 

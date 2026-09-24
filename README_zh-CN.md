@@ -135,8 +135,9 @@ Task 1/2/3 的七个正式权重是推理必需项；两个 initialization 权�
 
 网盘目录不包含两个第三方权重。请从
 [MINIMA 官方 Release](https://github.com/LSXI7/storage/releases/download/MINIMA/minima_loftr.ckpt)
-下载 MINIMA-LoFTR，并放到 `weights/external/minima_loftr.ckpt`；另将
-MNet/DeepCDR 视盘权重放到
+下载 MINIMA-LoFTR，并放到 `weights/external/minima_loftr.ckpt`；另从
+[HzFu/MNet_DeepCDR](https://github.com/HzFu/MNet_DeepCDR/blob/master/mnet_deep_cdr/deep_model/Model_DiscSeg_ORIGA.h5)
+下载 MNet/DeepCDR 视盘权重并放到
 `weights/external/Model_DiscSeg_ORIGA.h5`。
 
 ## 复现 VascFusion 推理
